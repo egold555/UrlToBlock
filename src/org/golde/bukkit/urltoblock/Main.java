@@ -46,14 +46,13 @@ public class Main extends JavaPlugin implements Listener{
 		getLogger().info("UrlToBlock plugin is starting.");
 		getKey();
 		populateBlockListFromServer();
-
 	}
 
+	//Stop Spigot from spamming everything that command blocks do.
 	boolean silenceSpigotConsole() {
 		String rootDir = new File(".").getAbsolutePath();
 		File spigotYml = new File(rootDir, "spigot.yml");
 		if(spigotYml.exists()) {
-			//Server is spigot, silence yml to prevent cmd block spam
 			FileConfiguration spigotConfig = YamlConfiguration.loadConfiguration(spigotYml);
 			spigotConfig.getConfigurationSection("commands").set("silent-commandblock-console", true);
 			try {
@@ -66,6 +65,7 @@ public class Main extends JavaPlugin implements Listener{
 		return false;
 	}
 
+	//Reads the UUID.key uuid so we know where on the server is their resource pack
 	void getKey() {
 		getDataFolder().mkdir();
 		File theKey = new File(getDataFolder(), "UUID.key");
@@ -85,6 +85,7 @@ public class Main extends JavaPlugin implements Listener{
 		}
 	}
 
+	//In game tab complete stuff
 	public List<String> onTabComplete(CommandSender sender, Command command, String alias, final String[] args){
 		List<String> l = new ArrayList<String>(); //makes a ArrayList
 		
@@ -114,7 +115,7 @@ public class Main extends JavaPlugin implements Listener{
 		return l;
 	}
 
-
+	//Plugin commands
 	public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
 
 		boolean isPlayer = sender instanceof Player;
@@ -169,6 +170,7 @@ public class Main extends JavaPlugin implements Listener{
 		}
 	}
 
+	//User help if command is typed wrong
 	void displayHelp(CommandSender sender, boolean isPlayer) {
 		sender.sendMessage("--- UrlToBlock Help ---");
 		sender.sendMessage("/ub add <image url> - Create a block");
@@ -180,6 +182,7 @@ public class Main extends JavaPlugin implements Listener{
 		sender.sendMessage("-----------------------");
 	}
 
+	//Adds a block to the game
 	void addBlock(CommandSender sender, String blockurl) {
 		try {
 			String url = "http://egoldblockcreator.azurewebsites.net/Api/AddTexture?uuid=" + key + "&texture=" + URLEncoder.encode(blockurl, "UTF-8");
@@ -203,11 +206,12 @@ public class Main extends JavaPlugin implements Listener{
 		}
 	}
 
-	@EventHandler
+	@EventHandler //gives the new joined player the resource pack
 	public void onPlayerJoin(PlayerJoinEvent e) {
 		getResourcePack(e.getPlayer());
 	}
 
+	//Send the resourcepack to the player
 	void getResourcePack(Player p) {
 		try {
 			String url = "http://egoldblockcreator.azurewebsites.net/Api/GetUrl?uuid=" + key;
@@ -216,7 +220,7 @@ public class Main extends JavaPlugin implements Listener{
 				getLogger().warning("Uh Oh! Something bad happened! Error Code: " + responce);
 				return;
 			}else {
-				responce = responce + "?a=" + rand.nextInt(); //get around minecraft's cashing of respurce packs
+				responce = responce + "?a=" + rand.nextInt(); //get around minecraft's cashing of resource packs
 				p.setResourcePack(responce);
 
 			}
@@ -226,6 +230,7 @@ public class Main extends JavaPlugin implements Listener{
 		}
 	}
 
+	//Send a get request to the backend
 	String sendGet(String url) throws Exception {
 
 		URL obj = new URL(url);
@@ -247,6 +252,7 @@ public class Main extends JavaPlugin implements Listener{
 
 	}
 
+	//Removed a block from the arraylist and from the backend server
 	void removeBlock(CommandSender sender, int damage) {
 		for(Block b:blocks) {
 			if(b.damage == damage) {
@@ -268,6 +274,7 @@ public class Main extends JavaPlugin implements Listener{
 		sender.sendMessage("Failed to remove block with id: " + damage);
 	}
 
+	//Get a list of damage ids from the backend server so we can populate the gui of past blocks we made
 	void populateBlockListFromServer() {
 		try {
 			String url = "http://egoldblockcreator.azurewebsites.net/Api/GetTextures?uuid=" + key;
@@ -290,6 +297,7 @@ public class Main extends JavaPlugin implements Listener{
 		}
 	}
 
+	//Show block GUI to a player (Starts at page 0)
 	void openGui(final Player p, final int pageNumber) {
 		int numberOfPages = 1 + (blocks.size() - 1) / 45;
 
@@ -332,8 +340,7 @@ public class Main extends JavaPlugin implements Listener{
 		gui.open(p);
 	}
 
-
-
+	//Gets a block by its damage value
 	Block getBlockByDamageValue(short damage) {
 		for(Block b:blocks) {
 			if(b.damage == damage) {
