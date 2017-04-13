@@ -1,0 +1,7 @@
+*.classpath
+*.project
+.settings/
+bin/
+doc/
+src/generatedoc.bat
+src/uploaddoc.bat

@@ -1,0 +1,13 @@
+name: UrlToBlock
+main: org.golde.bukkit.urltoblock.Main
+version: 1.0.0
+authors: ["Eric Golde", "Peter Golde"]
+description:
+website: http://eric.golde.org/
+commands:
+   urltoblock:
+      description: UrlToBlock main command
+      usage: /urltoblock
+      aliases: [urlblock, ub, utb]
+      permission: urltoblock.use
+      permission-message: Nope!
