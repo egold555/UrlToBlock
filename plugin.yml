@@ -2,11 +2,11 @@ name: UrlToBlock
 main: org.golde.bukkit.urltoblock.Main
 version: 1.0.0
 authors: ["Eric Golde", "Peter Golde"]
-description:
+description: Turn any Image into a placeable block
 website: http://eric.golde.org/
 commands:
    urltoblock:
-      description: UrlToBlock main command
+      description: UrlToBlock
       usage: /urltoblock
       aliases: [urlblock, ub, utb]
       permission: urltoblock.use

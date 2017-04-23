@@ -1,0 +1,2 @@
+#Remove spawner break particles from Custom Blocks?
+noParticles: true

@@ -17,6 +17,7 @@ import java.util.UUID;
 import java.util.function.Predicate;
 
 import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.command.Command;
@@ -26,6 +27,7 @@ import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -39,6 +41,7 @@ public class Main extends JavaPlugin implements Listener{
 	String key = "NO_KEY";
 	Random rand = new Random();
 	List<Block> blocks = new ArrayList<Block>();
+	final String website = "http://egoldblockcreator.azurewebsites.net/Api/";
 
 	public void onEnable() {
 		getCommand("urltoblock").setExecutor(this);
@@ -46,6 +49,13 @@ public class Main extends JavaPlugin implements Listener{
 		getLogger().info("UrlToBlock plugin is starting.");
 		getKey();
 		populateBlockListFromServer();
+		readConfig();
+	}
+
+	boolean noParticles = true;
+	void readConfig() {
+		saveDefaultConfig();
+		noParticles = getConfig().getBoolean("noParticles");
 	}
 
 	//Stop Spigot from spamming everything that command blocks do.
@@ -87,16 +97,18 @@ public class Main extends JavaPlugin implements Listener{
 
 	//In game tab complete stuff
 	public List<String> onTabComplete(CommandSender sender, Command command, String alias, final String[] args){
-		List<String> l = new ArrayList<String>(); //makes a ArrayList
-		
+		List<String> l = new ArrayList<String>();
+
 		if(args.length == 1) {
 			l.add("add");
 			l.add("remove");
+			l.add("reload");
 			if(sender instanceof Player) {l.add("gui");}
+			if(!(sender instanceof Player)) {l.add("purge");}
 			l.add("silent");
-			
+
 		}
-		
+
 		if(args.length == 2) {
 			if(args[0].equalsIgnoreCase("remove")) {
 				for(Block b:blocks) {
@@ -104,14 +116,14 @@ public class Main extends JavaPlugin implements Listener{
 				}
 			}
 		}
-		
+
 		l.removeIf(new Predicate<String>() {
 			@Override
 			public boolean test(String a) {
 				return !(a.startsWith(args[args.length - 1]));
 			}
 		});
-		
+
 		return l;
 	}
 
@@ -130,21 +142,24 @@ public class Main extends JavaPlugin implements Listener{
 				openGui((Player)sender, 0);
 			}
 			return true;
-		}else if(args[0].equalsIgnoreCase("add") | args[0].equalsIgnoreCase("create")) {
+		}
+		else if(args[0].equalsIgnoreCase("add") | args[0].equalsIgnoreCase("create")) {
 			if(args.length != 2) {
 				displayHelp(sender, isPlayer);
 				return true;
 			}
 			addBlock(sender, args[1]);
 			return true;
-		}else if(args[0].equalsIgnoreCase("remove") || args[0].equalsIgnoreCase("delete")) {
+		}
+		else if(args[0].equalsIgnoreCase("remove") || args[0].equalsIgnoreCase("delete")) {
 			if(args.length != 2 || !isInteger(args[1])) {
 				displayHelp(sender, isPlayer);
 				return true;
 			}else {
 				removeBlock(sender, Integer.parseInt(args[1]));
 			}
-		}else if(args[0].equalsIgnoreCase("silent")){
+		}
+		else if(args[0].equalsIgnoreCase("silent")){
 			for(World w:Bukkit.getWorlds()) {
 				w.setGameRuleValue("commandBlockOutput", "false"); //So no spam in chat when placing blocks
 			}
@@ -152,12 +167,37 @@ public class Main extends JavaPlugin implements Listener{
 			if(silenceSpigotConsole()) {
 				sender.sendMessage("Server restart required to apply changes.");
 			}
-		}				
+		}
+		else if(args[0].equalsIgnoreCase("reload")) {
+			readConfig();
+			sender.sendMessage("Config reloaded.");
+		}
+		else if(args[0].equalsIgnoreCase("purge")) {
+			if(isPlayer) {
+				sender.sendMessage("This command is for console only for safety reasons.");
+				return true;
+			}
+			purgeAllBlocks(sender);
+		}
 		else {
 			displayHelp(sender, isPlayer);
 		}
 
 		return true;
+	}
+
+	//Purge all made blocks from server (Console only)c
+	private void purgeAllBlocks(CommandSender sender) {
+		try {
+			sendGet(website + "DeleteAll?uuid=" + key);
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+		blocks = new ArrayList<Block>();
+		sender.sendMessage("Purged all blocks.");
+		for(Player all:Bukkit.getOnlinePlayers()) {
+			getResourcePack(all);
+		}
 	}
 
 	boolean isInteger(String s) {
@@ -178,6 +218,10 @@ public class Main extends JavaPlugin implements Listener{
 		if(isPlayer) {
 			sender.sendMessage("/ub gui - Open gui of all created blocks");
 		}
+		if(!isPlayer) {
+			sender.sendMessage("/ub purge - Remove all blocks");
+		}
+		sender.sendMessage("/ub reload - Reloads config");
 		sender.sendMessage("/ub silent - Silents command-block-output everywhere");
 		sender.sendMessage("-----------------------");
 	}
@@ -185,10 +229,12 @@ public class Main extends JavaPlugin implements Listener{
 	//Adds a block to the game
 	void addBlock(CommandSender sender, String blockurl) {
 		try {
-			String url = "http://egoldblockcreator.azurewebsites.net/Api/AddTexture?uuid=" + key + "&texture=" + URLEncoder.encode(blockurl, "UTF-8");
+			String url = website + "AddTexture?uuid=" + key + "&texture=" + URLEncoder.encode(blockurl, "UTF-8");
 			String responce = sendGet(url);
 			if(responce.startsWith("@")) {
-				sender.sendMessage("Uh Oh! Something bad happened! Error Code: " + responce);
+				String error = "Uh Oh! Something bad happened! Error Code: " + responce;
+				sender.sendMessage(ChatColor.RED + error);
+				getLogger().warning(error);
 				return;
 			}else {
 				blocks.add(new Block(Integer.parseInt(responce)));
@@ -214,7 +260,7 @@ public class Main extends JavaPlugin implements Listener{
 	//Send the resourcepack to the player
 	void getResourcePack(Player p) {
 		try {
-			String url = "http://egoldblockcreator.azurewebsites.net/Api/GetUrl?uuid=" + key;
+			String url = website + "GetUrl?uuid=" + key + "&spawner=" + noParticles;
 			String responce = sendGet(url);
 			if(responce.startsWith("@")) {
 				getLogger().warning("Uh Oh! Something bad happened! Error Code: " + responce);
@@ -258,10 +304,12 @@ public class Main extends JavaPlugin implements Listener{
 			if(b.damage == damage) {
 				blocks.remove(b);
 				try {
-					String url = "http://egoldblockcreator.azurewebsites.net/Api/DeleteTexture?uuid=" + key + "&damage=" + damage;
+					String url = website + "DeleteTexture?uuid=" + key + "&damage=" + damage;
 					String responce = sendGet(url);
 					if(responce.startsWith("@")) {
-						getLogger().warning("Uh Oh! Something bad happened! Error Code: " + responce);
+						String error = "Uh Oh! Something bad happened! Error Code: " + responce;
+						sender.sendMessage(ChatColor.RED + error);
+						getLogger().warning(error);
 						return;
 					}
 				} catch (Exception e) {
@@ -277,7 +325,7 @@ public class Main extends JavaPlugin implements Listener{
 	//Get a list of damage ids from the backend server so we can populate the gui of past blocks we made
 	void populateBlockListFromServer() {
 		try {
-			String url = "http://egoldblockcreator.azurewebsites.net/Api/GetTextures?uuid=" + key;
+			String url = website + "GetTextures?uuid=" + key;
 			String responce = sendGet(url);
 			if(responce.equals("")) {
 				return;
