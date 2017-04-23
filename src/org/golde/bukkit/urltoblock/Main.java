@@ -19,15 +19,20 @@ import java.util.function.Predicate;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
+import org.bukkit.Sound;
 import org.bukkit.World;
+import org.bukkit.attribute.Attribute;
+import org.bukkit.attribute.AttributeInstance;
+import org.bukkit.block.Block;
+import org.bukkit.block.BlockFace;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
-import org.bukkit.configuration.file.FileConfiguration;
-import org.bukkit.configuration.file.YamlConfiguration;
+import org.bukkit.craftbukkit.v1_11_R1.entity.CraftPlayer;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
-import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.event.block.Action;
+import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -35,12 +40,14 @@ import org.bukkit.scheduler.BukkitRunnable;
 import org.golde.bukkit.urltoblock.ChestGUI.OptionClickEvent;
 import org.golde.bukkit.urltoblock.ChestGUI.OptionClickEventHandler;
 
+import net.minecraft.server.v1_11_R1.EntityPlayer;
+import net.minecraft.server.v1_11_R1.PacketPlayOutAnimation;
 
 public class Main extends JavaPlugin implements Listener{
 
 	String key = "NO_KEY";
 	Random rand = new Random();
-	List<Block> blocks = new ArrayList<Block>();
+	List<UrlBlock> blocks = new ArrayList<UrlBlock>();
 	final String website = "http://egoldblockcreator.azurewebsites.net/Api/";
 
 	public void onEnable() {
@@ -56,23 +63,6 @@ public class Main extends JavaPlugin implements Listener{
 	void readConfig() {
 		saveDefaultConfig();
 		noParticles = getConfig().getBoolean("noParticles");
-	}
-
-	//Stop Spigot from spamming everything that command blocks do.
-	boolean silenceSpigotConsole() {
-		String rootDir = new File(".").getAbsolutePath();
-		File spigotYml = new File(rootDir, "spigot.yml");
-		if(spigotYml.exists()) {
-			FileConfiguration spigotConfig = YamlConfiguration.loadConfiguration(spigotYml);
-			spigotConfig.getConfigurationSection("commands").set("silent-commandblock-console", true);
-			try {
-				spigotConfig.save(spigotYml);
-				return true;
-			} catch (IOException e) {
-				e.printStackTrace();
-			}
-		}
-		return false;
 	}
 
 	//Reads the UUID.key uuid so we know where on the server is their resource pack
@@ -105,14 +95,13 @@ public class Main extends JavaPlugin implements Listener{
 			l.add("reload");
 			if(sender instanceof Player) {l.add("gui");}
 			if(!(sender instanceof Player)) {l.add("purge");}
-			l.add("silent");
 
 		}
 
 		if(args.length == 2) {
 			if(args[0].equalsIgnoreCase("remove")) {
-				for(Block b:blocks) {
-					l.add(String.valueOf(b.damage));
+				for(UrlBlock b:blocks) {
+					l.add(String.valueOf(b.getDamage()));
 				}
 			}
 		}
@@ -159,15 +148,6 @@ public class Main extends JavaPlugin implements Listener{
 				removeBlock(sender, Integer.parseInt(args[1]));
 			}
 		}
-		else if(args[0].equalsIgnoreCase("silent")){
-			for(World w:Bukkit.getWorlds()) {
-				w.setGameRuleValue("commandBlockOutput", "false"); //So no spam in chat when placing blocks
-			}
-			sender.sendMessage("Successfully changed values.");
-			if(silenceSpigotConsole()) {
-				sender.sendMessage("Server restart required to apply changes.");
-			}
-		}
 		else if(args[0].equalsIgnoreCase("reload")) {
 			readConfig();
 			sender.sendMessage("Config reloaded.");
@@ -193,7 +173,7 @@ public class Main extends JavaPlugin implements Listener{
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
-		blocks = new ArrayList<Block>();
+		blocks = new ArrayList<UrlBlock>();
 		sender.sendMessage("Purged all blocks.");
 		for(Player all:Bukkit.getOnlinePlayers()) {
 			getResourcePack(all);
@@ -222,7 +202,6 @@ public class Main extends JavaPlugin implements Listener{
 			sender.sendMessage("/ub purge - Remove all blocks");
 		}
 		sender.sendMessage("/ub reload - Reloads config");
-		sender.sendMessage("/ub silent - Silents command-block-output everywhere");
 		sender.sendMessage("-----------------------");
 	}
 
@@ -237,10 +216,10 @@ public class Main extends JavaPlugin implements Listener{
 				getLogger().warning(error);
 				return;
 			}else {
-				blocks.add(new Block(Integer.parseInt(responce)));
+				blocks.add(new UrlBlock(Integer.parseInt(responce)));
 				sender.sendMessage("Success!");
 				if(sender instanceof Player) {
-					((Player)sender).getInventory().addItem(getBlockByDamageValue((short)Integer.parseInt(responce)).block);
+					addBlock((Player)sender, (short)Integer.parseInt(responce));
 				}
 			}
 
@@ -300,8 +279,8 @@ public class Main extends JavaPlugin implements Listener{
 
 	//Removed a block from the arraylist and from the backend server
 	void removeBlock(CommandSender sender, int damage) {
-		for(Block b:blocks) {
-			if(b.damage == damage) {
+		for(UrlBlock b:blocks) {
+			if(b.getDamage() == damage) {
 				blocks.remove(b);
 				try {
 					String url = website + "DeleteTexture?uuid=" + key + "&damage=" + damage;
@@ -336,7 +315,7 @@ public class Main extends JavaPlugin implements Listener{
 			}else {
 				String[] arrayResponce = responce.split(",");
 				for(String num:arrayResponce) {
-					blocks.add(new Block(Integer.parseInt(num)));
+					blocks.add(new UrlBlock(Integer.parseInt(num)));
 				}
 			}
 
@@ -369,7 +348,7 @@ public class Main extends JavaPlugin implements Listener{
 					}.runTaskLater(Main.this, 2);
 				}
 				else {
-					p.getInventory().addItem(getBlockByDamageValue(e.getItem().getDurability()).block);
+					addBlock(p, e.getItem().getDurability());
 				}
 				e.setWillClose(true);
 				e.setWillDestroy(true);
@@ -382,20 +361,76 @@ public class Main extends JavaPlugin implements Listener{
 			gui.setOption(53, new ItemStack(Material.EMERALD), "&aNext Page", "");
 		}
 		for(int i = pageNumber * 45; i < Math.min((pageNumber + 1) * 45, blocks.size()); i++) {
-			gui.setOption(i - (pageNumber * 45), blocks.get(i).hoeItem, "&eClick to get Custom Block", "&bID: " + blocks.get(i).damage);
+			gui.setOption(i - (pageNumber * 45), blocks.get(i).getGuiItem(), "&eClick to get Custom Block", "&bID: " + blocks.get(i).getDamage());
 		}
 
 		gui.open(p);
 	}
 
 	//Gets a block by its damage value
-	Block getBlockByDamageValue(short damage) {
-		for(Block b:blocks) {
-			if(b.damage == damage) {
+	UrlBlock getBlockByDamageValue(short damage) {
+		for(UrlBlock b:blocks) {
+			if(b.getDamage() == damage) {
 				return b;
 			}
 		}
 		return null;
+	}
+	
+	//Is a url block item
+	boolean isUrlBlockItem(ItemStack i) {
+		for(UrlBlock b:blocks) {
+			if(b.getDamage() == i.getDurability()) {
+				return true;
+			}
+		}
+		return false;
+	}
+	
+	void addBlock(Player p, short data) {
+		p.getInventory().addItem(getBlockByDamageValue(data).getHandItem());
+		fixAttackSpeed(p);
+	}
+	
+	@EventHandler
+	public void onUrlBlockItemPlace(PlayerInteractEvent e) {
+		
+		Block blockClicked = e.getClickedBlock();
+		BlockFace clickedBlockFace = e.getBlockFace();
+		
+		
+	    if (blockClicked == null || e.getItem() == null) {
+	      return;
+	    }
+	    
+	    if(e.getAction() != Action.RIGHT_CLICK_BLOCK) {
+	    	return;
+	    }
+	    
+	    if(!isUrlBlockItem(e.getItem())) {
+	    	return;
+	    }
+	    World world =  blockClicked.getLocation().getWorld();
+	    UrlBlock urlBlock = getBlockByDamageValue(e.getItem().getDurability());
+	    urlBlock.placeBlock(blockClicked.getX() + clickedBlockFace.getModX(), blockClicked.getY() + clickedBlockFace.getModY(), blockClicked.getZ() + clickedBlockFace.getModZ());
+	    world.playSound(e.getClickedBlock().getLocation(), Sound.BLOCK_METAL_PLACE, 1, 1);
+	    armSwingAnimation(e.getPlayer());
+	}
+	
+	void fixAttackSpeed(Player p) {
+		AttributeInstance attribute = p.getAttribute(Attribute.GENERIC_ATTACK_SPEED);
+		attribute.setBaseValue(24);
+		p.saveData();
+	}
+	
+	void armSwingAnimation(Player p) {
+		packetPlayOutAnimation(p, 0);
+	}
+	
+	void packetPlayOutAnimation(Player p, int animation) {
+		EntityPlayer b = ((CraftPlayer) p).getHandle();
+		PacketPlayOutAnimation packet = new PacketPlayOutAnimation(b, animation);
+		b.playerConnection.sendPacket(packet);
 	}
 
 }
