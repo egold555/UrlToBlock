@@ -1,2 +1,2 @@
-#Remove spawner break particles from Custom Blocks?
+#If true no particle effects occur when breaking a custom block.
 noParticles: true
