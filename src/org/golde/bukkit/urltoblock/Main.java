@@ -27,6 +27,8 @@ import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
+import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.craftbukkit.v1_11_R1.entity.CraftPlayer;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -65,6 +67,23 @@ public class Main extends JavaPlugin implements Listener{
 		noParticles = getConfig().getBoolean("noParticles");
 	}
 
+	//Stop Spigot from spamming everything that command blocks do.
+	boolean silenceSpigotConsole() {
+		String rootDir = new File(".").getAbsolutePath();
+		File spigotYml = new File(rootDir, "spigot.yml");
+		if(spigotYml.exists()) {
+			FileConfiguration spigotConfig = YamlConfiguration.loadConfiguration(spigotYml);
+			spigotConfig.getConfigurationSection("commands").set("silent-commandblock-console", true);
+			try {
+				spigotConfig.save(spigotYml);
+				return true;
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+		}
+		return false;
+	}
+
 	//Reads the UUID.key uuid so we know where on the server is their resource pack
 	void getKey() {
 		getDataFolder().mkdir();
@@ -93,6 +112,7 @@ public class Main extends JavaPlugin implements Listener{
 			l.add("add");
 			l.add("remove");
 			l.add("reload");
+			l.add("silent");
 			if(sender instanceof Player) {l.add("gui");}
 			if(!(sender instanceof Player)) {l.add("purge");}
 
@@ -139,6 +159,15 @@ public class Main extends JavaPlugin implements Listener{
 			}
 			addBlock(sender, args[1]);
 			return true;
+		}
+		else if(args[0].equalsIgnoreCase("silent")){
+			for(World w:Bukkit.getWorlds()) {
+				w.setGameRuleValue("commandBlockOutput", "false"); //So no spam in chat when placing blocks
+			}
+			sender.sendMessage("Successfully changed values.");
+			if(silenceSpigotConsole()) {
+				sender.sendMessage("Server restart required to apply changes.");
+			}
 		}
 		else if(args[0].equalsIgnoreCase("remove") || args[0].equalsIgnoreCase("delete")) {
 			if(args.length != 2 || !isInteger(args[1])) {
@@ -201,6 +230,7 @@ public class Main extends JavaPlugin implements Listener{
 		if(!isPlayer) {
 			sender.sendMessage("/ub purge - Remove all blocks");
 		}
+		sender.sendMessage("/ub silent - Silents command-block-output everywhere");
 		sender.sendMessage("/ub reload - Reloads config");
 		sender.sendMessage("-----------------------");
 	}
@@ -376,7 +406,7 @@ public class Main extends JavaPlugin implements Listener{
 		}
 		return null;
 	}
-	
+
 	//Is a url block item
 	boolean isUrlBlockItem(ItemStack i) {
 		for(UrlBlock b:blocks) {
@@ -386,47 +416,47 @@ public class Main extends JavaPlugin implements Listener{
 		}
 		return false;
 	}
-	
+
 	void addBlock(Player p, short data) {
 		p.getInventory().addItem(getBlockByDamageValue(data).getHandItem());
 		fixAttackSpeed(p);
 	}
-	
+
 	@EventHandler
 	public void onUrlBlockItemPlace(PlayerInteractEvent e) {
-		
+
 		Block blockClicked = e.getClickedBlock();
 		BlockFace clickedBlockFace = e.getBlockFace();
-		
-		
-	    if (blockClicked == null || e.getItem() == null) {
-	      return;
-	    }
-	    
-	    if(e.getAction() != Action.RIGHT_CLICK_BLOCK) {
-	    	return;
-	    }
-	    
-	    if(!isUrlBlockItem(e.getItem())) {
-	    	return;
-	    }
-	    World world =  blockClicked.getLocation().getWorld();
-	    UrlBlock urlBlock = getBlockByDamageValue(e.getItem().getDurability());
-	    urlBlock.placeBlock(blockClicked.getX() + clickedBlockFace.getModX(), blockClicked.getY() + clickedBlockFace.getModY(), blockClicked.getZ() + clickedBlockFace.getModZ());
-	    world.playSound(e.getClickedBlock().getLocation(), Sound.BLOCK_METAL_PLACE, 1, 1);
-	    armSwingAnimation(e.getPlayer());
+
+
+		if (blockClicked == null || e.getItem() == null) {
+			return;
+		}
+
+		if(e.getAction() != Action.RIGHT_CLICK_BLOCK) {
+			return;
+		}
+
+		if(!isUrlBlockItem(e.getItem())) {
+			return;
+		}
+		World world =  blockClicked.getLocation().getWorld();
+		UrlBlock urlBlock = getBlockByDamageValue(e.getItem().getDurability());
+		urlBlock.placeBlock(blockClicked.getX() + clickedBlockFace.getModX(), blockClicked.getY() + clickedBlockFace.getModY(), blockClicked.getZ() + clickedBlockFace.getModZ());
+		world.playSound(e.getClickedBlock().getLocation(), Sound.BLOCK_METAL_PLACE, 1, 1);
+		armSwingAnimation(e.getPlayer());
 	}
-	
+
 	void fixAttackSpeed(Player p) {
 		AttributeInstance attribute = p.getAttribute(Attribute.GENERIC_ATTACK_SPEED);
 		attribute.setBaseValue(24);
 		p.saveData();
 	}
-	
+
 	void armSwingAnimation(Player p) {
 		packetPlayOutAnimation(p, 0);
 	}
-	
+
 	void packetPlayOutAnimation(Player p, int animation) {
 		EntityPlayer b = ((CraftPlayer) p).getHandle();
 		PacketPlayOutAnimation packet = new PacketPlayOutAnimation(b, animation);
