@@ -59,29 +59,16 @@ public class Main extends JavaPlugin implements Listener{
 		getKey();
 		populateBlockListFromServer();
 		readConfig();
+		
+		for(World w:Bukkit.getWorlds()) {
+			w.setGameRuleValue("sendCommandFeedback", "false"); //So no spam in chat when placing blocks
+		}
 	}
 
 	boolean noParticles = true;
 	void readConfig() {
 		saveDefaultConfig();
 		noParticles = getConfig().getBoolean("noParticles");
-	}
-
-	//Stop Spigot from spamming everything that command blocks do.
-	boolean silenceSpigotConsole() {
-		String rootDir = new File(".").getAbsolutePath();
-		File spigotYml = new File(rootDir, "spigot.yml");
-		if(spigotYml.exists()) {
-			FileConfiguration spigotConfig = YamlConfiguration.loadConfiguration(spigotYml);
-			spigotConfig.getConfigurationSection("commands").set("silent-commandblock-console", true);
-			try {
-				spigotConfig.save(spigotYml);
-				return true;
-			} catch (IOException e) {
-				e.printStackTrace();
-			}
-		}
-		return false;
 	}
 
 	//Reads the UUID.key uuid so we know where on the server is their resource pack
@@ -160,15 +147,7 @@ public class Main extends JavaPlugin implements Listener{
 			addBlock(sender, args[1]);
 			return true;
 		}
-		else if(args[0].equalsIgnoreCase("silent")){
-			for(World w:Bukkit.getWorlds()) {
-				w.setGameRuleValue("commandBlockOutput", "false"); //So no spam in chat when placing blocks
-			}
-			sender.sendMessage("Successfully changed values.");
-			if(silenceSpigotConsole()) {
-				sender.sendMessage("Server restart required to apply changes.");
-			}
-		}
+		
 		else if(args[0].equalsIgnoreCase("remove") || args[0].equalsIgnoreCase("delete")) {
 			if(args.length != 2 || !isInteger(args[1])) {
 				displayHelp(sender, isPlayer);
@@ -230,7 +209,6 @@ public class Main extends JavaPlugin implements Listener{
 		if(!isPlayer) {
 			sender.sendMessage("/ub purge - Remove all blocks");
 		}
-		sender.sendMessage("/ub silent - Silents command-block-output everywhere");
 		sender.sendMessage("/ub reload - Reloads config");
 		sender.sendMessage("-----------------------");
 	}
@@ -442,7 +420,7 @@ public class Main extends JavaPlugin implements Listener{
 		}
 		World world =  blockClicked.getLocation().getWorld();
 		UrlBlock urlBlock = getBlockByDamageValue(e.getItem().getDurability());
-		urlBlock.placeBlock(blockClicked.getX() + clickedBlockFace.getModX(), blockClicked.getY() + clickedBlockFace.getModY(), blockClicked.getZ() + clickedBlockFace.getModZ());
+		urlBlock.placeBlock(e.getPlayer(), blockClicked.getX() + clickedBlockFace.getModX(), blockClicked.getY() + clickedBlockFace.getModY(), blockClicked.getZ() + clickedBlockFace.getModZ());
 		world.playSound(e.getClickedBlock().getLocation(), Sound.BLOCK_METAL_PLACE, 1, 1);
 		armSwingAnimation(e.getPlayer());
 	}
