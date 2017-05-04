@@ -27,8 +27,6 @@ import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
-import org.bukkit.configuration.file.FileConfiguration;
-import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.craftbukkit.v1_11_R1.entity.CraftPlayer;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -51,17 +49,43 @@ public class Main extends JavaPlugin implements Listener{
 	Random rand = new Random();
 	List<UrlBlock> blocks = new ArrayList<UrlBlock>();
 	final String website = "http://egoldblockcreator.azurewebsites.net/Api/";
+	static Main plugin;
 
 	public void onEnable() {
+		plugin = this;
 		getCommand("urltoblock").setExecutor(this);
 		Bukkit.getPluginManager().registerEvents(this, this);
 		getLogger().info("UrlToBlock plugin is starting.");
 		getKey();
 		populateBlockListFromServer();
 		readConfig();
-		
+
 		for(World w:Bukkit.getWorlds()) {
 			w.setGameRuleValue("sendCommandFeedback", "false"); //So no spam in chat when placing blocks
+		}
+		checkForUpdates();
+	}
+
+	void checkForUpdates(){
+		Updater updater = new Updater("40330"); 
+		Updater.UpdateResults result = updater.checkForUpdates();
+		if(result.getResult() == Updater.UpdateResult.FAIL)
+		{
+			getLogger().severe("Update checker failed to check for updates!");
+			getLogger().severe("Stacktrace: " + result.getVersion());
+		}
+		else if(result.getResult() == Updater.UpdateResult.NO_UPDATE)
+		{
+			getLogger().info("No update available");
+		}
+		else if(result.getResult() == Updater.UpdateResult.UPDATE_AVAILABLE)
+		{
+			Bukkit.getConsoleSender().sendMessage("[UrlToBlock] §aAn update for UrlToBlock has been found!");
+			Bukkit.getConsoleSender().sendMessage("[UrlToBlock] §bCurrent version: §e" + getDescription().getVersion() + "§b, new version: §e" + result.getVersion());
+		}
+		else if (result.getResult() == Updater.UpdateResult.DEV){
+			Bukkit.getConsoleSender().sendMessage("[UrlToBlock] §eYou seem to have a version of the plugin that is not on spigot...");
+			Bukkit.getConsoleSender().sendMessage("[UrlToBlock] §cExpect bugs!");
 		}
 	}
 
@@ -147,7 +171,7 @@ public class Main extends JavaPlugin implements Listener{
 			addBlock(sender, args[1]);
 			return true;
 		}
-		
+
 		else if(args[0].equalsIgnoreCase("remove") || args[0].equalsIgnoreCase("delete")) {
 			if(args.length != 2 || !isInteger(args[1])) {
 				displayHelp(sender, isPlayer);
@@ -240,8 +264,14 @@ public class Main extends JavaPlugin implements Listener{
 	}
 
 	@EventHandler //gives the new joined player the resource pack
-	public void onPlayerJoin(PlayerJoinEvent e) {
-		getResourcePack(e.getPlayer());
+	public void onPlayerJoin(final PlayerJoinEvent e) {
+		new BukkitRunnable() {
+			@Override
+			public void run() {
+				getResourcePack(e.getPlayer());
+			}
+		}.runTaskLater(this, 2);
+		
 	}
 
 	//Send the resourcepack to the player
@@ -264,24 +294,28 @@ public class Main extends JavaPlugin implements Listener{
 	}
 
 	//Send a get request to the backend
-	String sendGet(String url) throws Exception {
+	String sendGet(String url) {
+		try {
+			URL obj = new URL(url);
+			HttpURLConnection con = (HttpURLConnection) obj.openConnection();
 
-		URL obj = new URL(url);
-		HttpURLConnection con = (HttpURLConnection) obj.openConnection();
+			con.setRequestMethod("GET");
 
-		con.setRequestMethod("GET");
+			BufferedReader in = new BufferedReader(
+					new InputStreamReader(con.getInputStream()));
+			String inputLine;
+			StringBuffer response = new StringBuffer();
 
-		BufferedReader in = new BufferedReader(
-				new InputStreamReader(con.getInputStream()));
-		String inputLine;
-		StringBuffer response = new StringBuffer();
-
-		while ((inputLine = in.readLine()) != null) {
-			response.append(inputLine);
+			while ((inputLine = in.readLine()) != null) {
+				response.append(inputLine);
+			}
+			in.close();
+			return response.toString();
+		}catch(Exception e) {
+			return "@Texture Server seems to be offline. Please try again later.";
 		}
-		in.close();
 
-		return response.toString();
+
 
 	}
 
@@ -432,12 +466,8 @@ public class Main extends JavaPlugin implements Listener{
 	}
 
 	void armSwingAnimation(Player p) {
-		packetPlayOutAnimation(p, 0);
-	}
-
-	void packetPlayOutAnimation(Player p, int animation) {
 		EntityPlayer b = ((CraftPlayer) p).getHandle();
-		PacketPlayOutAnimation packet = new PacketPlayOutAnimation(b, animation);
+		PacketPlayOutAnimation packet = new PacketPlayOutAnimation(b, 0);
 		b.playerConnection.sendPacket(packet);
 	}
 
