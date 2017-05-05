@@ -7,10 +7,12 @@ import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.lang.reflect.Field;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Random;
 import java.util.UUID;
@@ -18,6 +20,8 @@ import java.util.function.Predicate;
 
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
+import org.bukkit.GameMode;
+import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.Sound;
 import org.bukkit.World;
@@ -25,22 +29,37 @@ import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
+import org.bukkit.block.BlockState;
+import org.bukkit.block.CreatureSpawner;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
+import org.bukkit.craftbukkit.v1_11_R1.block.CraftCreatureSpawner;
 import org.bukkit.craftbukkit.v1_11_R1.entity.CraftPlayer;
+import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
+import org.bukkit.event.Cancellable;
+import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
+import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerPickupItemEvent;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.PlayerInventory;
+import org.bukkit.metadata.MetadataValue;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.golde.bukkit.urltoblock.ChestGUI.OptionClickEvent;
 import org.golde.bukkit.urltoblock.ChestGUI.OptionClickEventHandler;
+import org.golde.bukkit.urltoblock.api.events.UrlBlockBreakEvent;
+import org.golde.bukkit.urltoblock.api.events.UrlBlockClickEvent;
+import org.golde.bukkit.urltoblock.api.events.UrlBlockPlaceEvent;
 
 import net.minecraft.server.v1_11_R1.EntityPlayer;
+import net.minecraft.server.v1_11_R1.NBTTagCompound;
+import net.minecraft.server.v1_11_R1.NBTTagList;
 import net.minecraft.server.v1_11_R1.PacketPlayOutAnimation;
 
 public class Main extends JavaPlugin implements Listener{
@@ -49,7 +68,7 @@ public class Main extends JavaPlugin implements Listener{
 	Random rand = new Random();
 	List<UrlBlock> blocks = new ArrayList<UrlBlock>();
 	final String website = "http://egoldblockcreator.azurewebsites.net/Api/";
-	static Main plugin;
+	public static Main plugin;
 
 	public void onEnable() {
 		plugin = this;
@@ -271,7 +290,7 @@ public class Main extends JavaPlugin implements Listener{
 				getResourcePack(e.getPlayer());
 			}
 		}.runTaskLater(this, 2);
-		
+
 	}
 
 	//Send the resourcepack to the player
@@ -435,13 +454,44 @@ public class Main extends JavaPlugin implements Listener{
 	}
 
 	@EventHandler
+	public void onBreak(BlockBreakEvent e) {
+		Block blockClicked = e.getBlock();
+
+		if (blockClicked == null) {
+			return;
+		}
+
+		if(isUrlBlock(blockClicked.getLocation())) {
+			int id = getIdFromSpawner(blockClicked.getLocation());
+			if(id >=0) {
+				e.setExpToDrop(0);
+				e.setCancelled(callEvent(new UrlBlockBreakEvent(blockClicked.getLocation(), id, e.getPlayer())));
+				if(e.getPlayer().getGameMode() != GameMode.CREATIVE) {
+					e.getBlock().getLocation().getWorld().dropItem(e.getBlock().getLocation(), getBlockByDamageValue((short)id).getHandItem());
+				}
+			}
+		}
+	}
+
+	@EventHandler
 	public void onUrlBlockItemPlace(PlayerInteractEvent e) {
 
 		Block blockClicked = e.getClickedBlock();
 		BlockFace clickedBlockFace = e.getBlockFace();
 
 
-		if (blockClicked == null || e.getItem() == null) {
+		if (blockClicked == null) {
+			return;
+		}
+
+		if(isUrlBlock(blockClicked.getLocation())) {
+			int id = getIdFromSpawner(blockClicked.getLocation());
+			if(id >=0) {
+				callEvent(new UrlBlockClickEvent(e.getPlayer(), id, e.getAction(), clickedBlockFace, e.getHand()));
+			}
+		}
+
+		if(e.getItem() == null) {
 			return;
 		}
 
@@ -452,11 +502,34 @@ public class Main extends JavaPlugin implements Listener{
 		if(!isUrlBlockItem(e.getItem())) {
 			return;
 		}
+
 		World world =  blockClicked.getLocation().getWorld();
 		UrlBlock urlBlock = getBlockByDamageValue(e.getItem().getDurability());
-		urlBlock.placeBlock(e.getPlayer(), blockClicked.getX() + clickedBlockFace.getModX(), blockClicked.getY() + clickedBlockFace.getModY(), blockClicked.getZ() + clickedBlockFace.getModZ());
-		world.playSound(e.getClickedBlock().getLocation(), Sound.BLOCK_METAL_PLACE, 1, 1);
-		armSwingAnimation(e.getPlayer());
+		boolean cancled = callEvent(new UrlBlockPlaceEvent(blockClicked.getLocation(), urlBlock.getDamage(), e.getPlayer()));
+
+		if(!cancled) {
+			urlBlock.placeBlock(e.getPlayer(), blockClicked.getX() + clickedBlockFace.getModX(), blockClicked.getY() + clickedBlockFace.getModY(), blockClicked.getZ() + clickedBlockFace.getModZ());
+			world.playSound(e.getClickedBlock().getLocation(), Sound.BLOCK_METAL_PLACE, 1, 0);
+			armSwingAnimation(e.getPlayer());
+			removeItemFromPlayer(e.getPlayer(), e.getItem());
+		}
+	}
+
+	void removeItemFromPlayer(Player p, ItemStack i) {
+		if(p.getGameMode() == GameMode.SURVIVAL) {
+			i.setAmount(i.getAmount() - 1);
+			p.updateInventory();
+		}
+	}
+
+	boolean callEvent(Event event) {
+		getServer().getPluginManager().callEvent(event);
+		if(event instanceof Cancellable) {
+			if(((Cancellable) event).isCancelled()){
+				return true;
+			}
+		}
+		return false;
 	}
 
 	void fixAttackSpeed(Player p) {
@@ -469,6 +542,87 @@ public class Main extends JavaPlugin implements Listener{
 		EntityPlayer b = ((CraftPlayer) p).getHandle();
 		PacketPlayOutAnimation packet = new PacketPlayOutAnimation(b, 0);
 		b.playerConnection.sendPacket(packet);
+	}
+
+	public boolean isUrlBlock(Location l) {
+		Block b = l.getBlock();
+		if(b == null) {
+			return false;
+		}
+
+		BlockState bs = b.getState();
+		if(bs == null) {
+			return false;
+		}
+
+		if(bs.getType() == Material.MOB_SPAWNER) {
+			CreatureSpawner spawner = (CreatureSpawner)bs;
+			if(spawner.getSpawnedType() == EntityType.ARMOR_STAND) {
+				//Bad way to telling but it works for now
+				return true;
+			}
+		}
+		return false;
+	}
+
+	public int getIdFromSpawner(Location l) {
+		if(!isUrlBlock(l)) {return -1;}
+		BlockState blockState = l.getBlock().getState();
+		CraftCreatureSpawner spawner = ((CraftCreatureSpawner)blockState);
+		try {
+			net.minecraft.server.v1_11_R1.TileEntityMobSpawner tile = spawner.getTileEntity();
+			NBTTagList handItems = (NBTTagList)((NBTTagCompound)tile.d().get("SpawnData")).get("HandItems");
+			return handItems.get(0).getInt("Damage");
+		}catch(Exception e) {
+			e.printStackTrace();
+			return -2;
+		}
+	}
+
+	@EventHandler
+	public void pickupItem(PlayerPickupItemEvent e) {
+		ItemStack i = e.getItem().getItemStack();
+		if(isUrlBlockItem(i)) {
+			stackItems(e);
+			e.getItem().remove();
+		}
+
+	}
+
+	void stackItems(PlayerPickupItemEvent event) {
+		ItemStack is = event.getItem().getItemStack();
+		if (is == null || is.getItemMeta() == null || is.getItemMeta().getDisplayName() == null)
+			return;
+		
+		int countPickedUp = is.getAmount();
+		PlayerInventory inv = event.getPlayer().getInventory();
+		
+		for (int slot = 0; slot < inv.getSize(); ++slot)
+		{
+			ItemStack current = inv.getItem(slot);
+			if (current != null && current.getItemMeta() != null && current.getItemMeta().getDisplayName() != null && current.getItemMeta().getDisplayName().equals(is.getItemMeta().getDisplayName())) {
+				int numberLeft = 64 - current.getAmount();
+				if (numberLeft > 0) {
+					int add = Math.min(numberLeft, countPickedUp);
+					current.setAmount(current.getAmount() + add);
+					inv.setItem(slot, current);
+					countPickedUp -= add;
+				}
+			}
+		
+			if (countPickedUp == 0)
+				break;
+		}
+		
+		if (countPickedUp > 0) {
+			is.setAmount(countPickedUp);
+			for (ItemStack extra: inv.addItem(is).values()) {
+				event.getPlayer().getLocation().getWorld().dropItem(event.getPlayer().getLocation(), extra);
+			}
+		}
+		
+		event.getPlayer().updateInventory();
+		event.setCancelled(true);
 	}
 
 }
