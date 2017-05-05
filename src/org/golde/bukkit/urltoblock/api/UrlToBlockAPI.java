@@ -1,7 +1,9 @@
 package org.golde.bukkit.urltoblock.api;
 
 import org.bukkit.Location;
+import org.bukkit.inventory.ItemStack;
 import org.golde.bukkit.urltoblock.Main;
+import org.golde.bukkit.urltoblock.UrlBlock;
 
 public class UrlToBlockAPI {
 
@@ -11,14 +13,12 @@ public class UrlToBlockAPI {
 		return main.isUrlBlock(loc);
 	}
 	
-	@Deprecated
-	public static void placeUrlBlock(Location loc, int id) {
-		
+	public static boolean isUrlBlockItem(ItemStack item) {
+		return main.isUrlBlockItem(item);
 	}
 	
-	@Deprecated
-	public int[] getAllUrlBlocks() {
-		return new int[] {};
+	public static UrlBlock getUrlBlockByID(short id) {
+		return main.getBlockByDamageValue(id);
 	}
 	
 }

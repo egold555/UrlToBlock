@@ -1,6 +1,6 @@
 name: UrlToBlock
 main: org.golde.bukkit.urltoblock.Main
-version: 1.0.3
+version: 1.0.4
 authors: ["Eric Golde", "Peter Golde"]
 description: Turn any image into a placeable block
 load: POSTWORLD

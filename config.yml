@@ -1,2 +1,9 @@
+#Tells you when there is a new update for my plugin
+enable-update-checker: true
+
 #If true no particle effects occur when breaking a custom block.
 noParticles: true
+
+#If you have an existing server resource pack that should get applied to the client, put the url to the zip file here. 
+#If you do not have one, leave it as "NONE"
+existing-resource-pack: "NONE"

@@ -7,12 +7,10 @@ import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.lang.reflect.Field;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Random;
 import java.util.UUID;
@@ -35,6 +33,7 @@ import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.craftbukkit.v1_11_R1.block.CraftCreatureSpawner;
 import org.bukkit.craftbukkit.v1_11_R1.entity.CraftPlayer;
+import org.bukkit.craftbukkit.v1_11_R1.inventory.CraftItemStack;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 import org.bukkit.event.Cancellable;
@@ -48,7 +47,6 @@ import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerPickupItemEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
-import org.bukkit.metadata.MetadataValue;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.golde.bukkit.urltoblock.ChestGUI.OptionClickEvent;
@@ -56,10 +54,14 @@ import org.golde.bukkit.urltoblock.ChestGUI.OptionClickEventHandler;
 import org.golde.bukkit.urltoblock.api.events.UrlBlockBreakEvent;
 import org.golde.bukkit.urltoblock.api.events.UrlBlockClickEvent;
 import org.golde.bukkit.urltoblock.api.events.UrlBlockPlaceEvent;
+import org.golde.bukkit.urltoblock.dump.DumpException;
+import org.golde.bukkit.urltoblock.dump.ReportError;
 
 import net.minecraft.server.v1_11_R1.EntityPlayer;
 import net.minecraft.server.v1_11_R1.NBTTagCompound;
+import net.minecraft.server.v1_11_R1.NBTTagInt;
 import net.minecraft.server.v1_11_R1.NBTTagList;
+import net.minecraft.server.v1_11_R1.NBTTagString;
 import net.minecraft.server.v1_11_R1.PacketPlayOutAnimation;
 
 public class Main extends JavaPlugin implements Listener{
@@ -69,7 +71,7 @@ public class Main extends JavaPlugin implements Listener{
 	List<UrlBlock> blocks = new ArrayList<UrlBlock>();
 	final String website = "http://egoldblockcreator.azurewebsites.net/Api/";
 	public static Main plugin;
-
+	public ServerType SERVER_TYPE;
 	public void onEnable() {
 		plugin = this;
 		getCommand("urltoblock").setExecutor(this);
@@ -78,7 +80,7 @@ public class Main extends JavaPlugin implements Listener{
 		getKey();
 		populateBlockListFromServer();
 		readConfig();
-
+		SERVER_TYPE = ServerType.whatAmI(this);
 		for(World w:Bukkit.getWorlds()) {
 			w.setGameRuleValue("sendCommandFeedback", "false"); //So no spam in chat when placing blocks
 		}
@@ -130,7 +132,7 @@ public class Main extends JavaPlugin implements Listener{
 			key = reader.readLine(); 
 			reader.close();
 		}catch (IOException e) {
-			e.printStackTrace();
+			//e.printStackTrace();
 		}
 	}
 
@@ -143,6 +145,7 @@ public class Main extends JavaPlugin implements Listener{
 			l.add("remove");
 			l.add("reload");
 			l.add("silent");
+			l.add("dump");
 			if(sender instanceof Player) {l.add("gui");}
 			if(!(sender instanceof Player)) {l.add("purge");}
 
@@ -210,6 +213,9 @@ public class Main extends JavaPlugin implements Listener{
 			}
 			purgeAllBlocks(sender);
 		}
+		else if(args[0].equalsIgnoreCase("dump")) {
+			new ReportError(new DumpException(), sender);
+		}
 		else {
 			displayHelp(sender, isPlayer);
 		}
@@ -246,6 +252,7 @@ public class Main extends JavaPlugin implements Listener{
 		sender.sendMessage("--- UrlToBlock Help ---");
 		sender.sendMessage("/ub add <image url> - Create a block");
 		sender.sendMessage("/ub remove <id> - Remove a block");
+		sender.sendMessage("/ub dump - Dump debug info");
 		if(isPlayer) {
 			sender.sendMessage("/ub gui - Open gui of all created blocks");
 		}
@@ -293,10 +300,22 @@ public class Main extends JavaPlugin implements Listener{
 
 	}
 
+	boolean hasExternalResourcePack(){
+		String con = getConfig().getString("existing-resource-pack");
+		if(con == null || con.equalsIgnoreCase("") || con.equalsIgnoreCase(" ") || con.equalsIgnoreCase("NONE")) {
+			return false;
+		}
+		return true;
+	}
+
 	//Send the resourcepack to the player
 	void getResourcePack(Player p) {
 		try {
 			String url = website + "GetUrl?uuid=" + key + "&spawner=" + noParticles;
+			if(hasExternalResourcePack()) {
+				url+= "&merge=" + URLEncoder.encode(getConfig().getString("existing-resource-pack"), "UTF-8");
+			}
+
 			String responce = sendGet(url);
 			if(responce.startsWith("@")) {
 				getLogger().warning("Uh Oh! Something bad happened! Error Code: " + responce);
@@ -353,7 +372,8 @@ public class Main extends JavaPlugin implements Listener{
 						return;
 					}
 				} catch (Exception e) {
-					e.printStackTrace();
+					new ReportError(e, sender);
+					//e.printStackTrace();
 				}
 				sender.sendMessage("Successfully removed block!");
 				return;
@@ -381,6 +401,7 @@ public class Main extends JavaPlugin implements Listener{
 			}
 
 		} catch (Exception e) {
+			new ReportError(e);
 			e.printStackTrace();
 		}
 	}
@@ -429,7 +450,7 @@ public class Main extends JavaPlugin implements Listener{
 	}
 
 	//Gets a block by its damage value
-	UrlBlock getBlockByDamageValue(short damage) {
+	public UrlBlock getBlockByDamageValue(short damage) {
 		for(UrlBlock b:blocks) {
 			if(b.getDamage() == damage) {
 				return b;
@@ -439,9 +460,9 @@ public class Main extends JavaPlugin implements Listener{
 	}
 
 	//Is a url block item
-	boolean isUrlBlockItem(ItemStack i) {
+	public boolean isUrlBlockItem(ItemStack i) {
 		for(UrlBlock b:blocks) {
-			if(b.getDamage() == i.getDurability()) {
+			if(b.getDamage() == i.getDurability() && i.getItemMeta().isUnbreakable() && (i.getType() == Material.DIAMOND_AXE || i.getType() == Material.DIAMOND_HOE)) {
 				return true;
 			}
 		}
@@ -449,8 +470,19 @@ public class Main extends JavaPlugin implements Listener{
 	}
 
 	void addBlock(Player p, short data) {
-		p.getInventory().addItem(getBlockByDamageValue(data).getHandItem());
-		fixAttackSpeed(p);
+		ItemStack i = getBlockByDamageValue(data).getHandItem();
+		i = fixAttackSpeed(p, i);
+		p.getInventory().addItem(i);
+	}
+
+	@EventHandler (ignoreCancelled = true) //TODO: Temporary because I messed up
+	public void onJoin(final PlayerJoinEvent e) {
+		new BukkitRunnable() {
+			@Override
+			public void run() {
+				revertAttackSpeedCauseIMessedUp(e.getPlayer());
+			}
+		}.runTaskLater(this, 2);
 	}
 
 	@EventHandler
@@ -462,7 +494,7 @@ public class Main extends JavaPlugin implements Listener{
 		}
 
 		if(isUrlBlock(blockClicked.getLocation())) {
-			int id = getIdFromSpawner(blockClicked.getLocation());
+			int id = getIdFromSpawner(blockClicked.getLocation(), e.getPlayer());
 			if(id >=0) {
 				e.setExpToDrop(0);
 				e.setCancelled(callEvent(new UrlBlockBreakEvent(blockClicked.getLocation(), id, e.getPlayer())));
@@ -485,7 +517,7 @@ public class Main extends JavaPlugin implements Listener{
 		}
 
 		if(isUrlBlock(blockClicked.getLocation())) {
-			int id = getIdFromSpawner(blockClicked.getLocation());
+			int id = getIdFromSpawner(blockClicked.getLocation(), e.getPlayer());
 			if(id >=0) {
 				callEvent(new UrlBlockClickEvent(e.getPlayer(), id, e.getAction(), clickedBlockFace, e.getHand()));
 			}
@@ -532,16 +564,43 @@ public class Main extends JavaPlugin implements Listener{
 		return false;
 	}
 
-	void fixAttackSpeed(Player p) {
+	void revertAttackSpeedCauseIMessedUp(Player p) {
 		AttributeInstance attribute = p.getAttribute(Attribute.GENERIC_ATTACK_SPEED);
-		attribute.setBaseValue(24);
+		attribute.setBaseValue(attribute.getDefaultValue());
 		p.saveData();
 	}
 
+	ItemStack fixAttackSpeed(Player p, ItemStack item) {
+		try {
+			net.minecraft.server.v1_11_R1.ItemStack nmsStack = CraftItemStack.asNMSCopy(item);
+			NBTTagCompound compound = (nmsStack.hasTag()) ? nmsStack.getTag() : new NBTTagCompound();
+			NBTTagList modifiers = new NBTTagList();
+			NBTTagCompound damage = new NBTTagCompound();
+			damage.set("AttributeName", new NBTTagString("generic.attackSpeed"));
+			damage.set("Name", new NBTTagString("generic.attackSpeed"));
+			damage.set("Amount", new NBTTagInt(24));
+			damage.set("Operation", new NBTTagInt(0));
+			damage.set("UUIDLeast", new NBTTagInt(894654));
+			damage.set("UUIDMost", new NBTTagInt(2872));
+			modifiers.add(damage);
+			compound.set("AttributeModifiers", modifiers);
+			nmsStack.setTag(compound);
+			item = CraftItemStack.asBukkitCopy(nmsStack);
+		}
+		catch(Exception e) {
+			new ReportError(e, p);
+		}
+		return item;
+	}
+
 	void armSwingAnimation(Player p) {
-		EntityPlayer b = ((CraftPlayer) p).getHandle();
-		PacketPlayOutAnimation packet = new PacketPlayOutAnimation(b, 0);
-		b.playerConnection.sendPacket(packet);
+		try {
+			EntityPlayer b = ((CraftPlayer) p).getHandle();
+			PacketPlayOutAnimation packet = new PacketPlayOutAnimation(b, 0);
+			b.playerConnection.sendPacket(packet);
+		}catch(Exception e) {
+			new ReportError(e, p);
+		}
 	}
 
 	public boolean isUrlBlock(Location l) {
@@ -565,7 +624,7 @@ public class Main extends JavaPlugin implements Listener{
 		return false;
 	}
 
-	public int getIdFromSpawner(Location l) {
+	public int getIdFromSpawner(Location l, CommandSender p) {
 		if(!isUrlBlock(l)) {return -1;}
 		BlockState blockState = l.getBlock().getState();
 		CraftCreatureSpawner spawner = ((CraftCreatureSpawner)blockState);
@@ -574,7 +633,8 @@ public class Main extends JavaPlugin implements Listener{
 			NBTTagList handItems = (NBTTagList)((NBTTagCompound)tile.d().get("SpawnData")).get("HandItems");
 			return handItems.get(0).getInt("Damage");
 		}catch(Exception e) {
-			e.printStackTrace();
+			new ReportError(e, p);
+			//e.printStackTrace();
 			return -2;
 		}
 	}
@@ -593,10 +653,10 @@ public class Main extends JavaPlugin implements Listener{
 		ItemStack is = event.getItem().getItemStack();
 		if (is == null || is.getItemMeta() == null || is.getItemMeta().getDisplayName() == null)
 			return;
-		
+
 		int countPickedUp = is.getAmount();
 		PlayerInventory inv = event.getPlayer().getInventory();
-		
+
 		for (int slot = 0; slot < inv.getSize(); ++slot)
 		{
 			ItemStack current = inv.getItem(slot);
@@ -609,20 +669,32 @@ public class Main extends JavaPlugin implements Listener{
 					countPickedUp -= add;
 				}
 			}
-		
+
 			if (countPickedUp == 0)
 				break;
 		}
-		
+
 		if (countPickedUp > 0) {
 			is.setAmount(countPickedUp);
 			for (ItemStack extra: inv.addItem(is).values()) {
 				event.getPlayer().getLocation().getWorld().dropItem(event.getPlayer().getLocation(), extra);
 			}
 		}
-		
+
 		event.getPlayer().updateInventory();
 		event.setCancelled(true);
+	}
+
+	public String commaSep(ArrayList<String> list)
+	{
+		String result = "";
+		for (int i = 0; i < list.size(); ++i) {
+			if (i != 0){
+				result += ", ";
+			}
+			result += list.get(i);
+		}
+		return result;
 	}
 
 }
