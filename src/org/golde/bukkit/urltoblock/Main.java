@@ -7,11 +7,11 @@ import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.UnsupportedEncodingException;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
 import java.util.Random;
 import java.util.UUID;
@@ -67,10 +67,10 @@ import net.minecraft.server.v1_11_R1.PacketPlayOutAnimation;
 
 public class Main extends JavaPlugin implements Listener{
 
+	final boolean DEV = true;
 	String key = "NO_KEY";
 	Random rand = new Random();
 	List<UrlBlock> blocks = new ArrayList<UrlBlock>();
-	final String website = "http://egoldblockcreator.azurewebsites.net/Api/";
 	public static Main plugin;
 	public ServerType SERVER_TYPE;
 	public void onEnable() {
@@ -86,6 +86,11 @@ public class Main extends JavaPlugin implements Listener{
 			w.setGameRuleValue("sendCommandFeedback", "false"); //So no spam in chat when placing blocks
 		}
 		checkForUpdates();
+	}
+
+	final String getWebsite() {
+		if(DEV) {return "http://egoldblockcreatordev.azurewebsites.net/Api/";}
+		return "http://egoldblockcreator.azurewebsites.net/Api/";
 	}
 
 	void checkForUpdates(){
@@ -143,6 +148,7 @@ public class Main extends JavaPlugin implements Listener{
 
 		if(args.length == 1) {
 			l.add("add");
+			l.add("addTile");
 			l.add("remove");
 			l.add("reload");
 			l.add("silent");
@@ -186,7 +192,16 @@ public class Main extends JavaPlugin implements Listener{
 			}
 			return true;
 		}
-		else if(args[0].equalsIgnoreCase("add") | args[0].equalsIgnoreCase("create")) {
+		else if(args[0].equalsIgnoreCase("addTile")) {
+			if(args.length != 4) {
+				displayHelp(sender, isPlayer);
+				return true;
+			}
+			addTileBlock(sender, args[1], Integer.valueOf(args[2]), Integer.valueOf(args[3]));
+			return true;
+		}
+
+		else if(args[0].equalsIgnoreCase("add")) {
 			if(args.length != 2) {
 				displayHelp(sender, isPlayer);
 				return true;
@@ -225,15 +240,14 @@ public class Main extends JavaPlugin implements Listener{
 	}
 
 	//Purge all made blocks from server (Console only)c
-	private void purgeAllBlocks(CommandSender sender) {
-		try {
-			sendGet(website + "DeleteAll?uuid=" + key);
-		} catch (Exception e) {
-			e.printStackTrace();
-		}
-		blocks = new ArrayList<UrlBlock>();
-		sender.sendMessage("Purged all blocks.");
-		getResourcePack(Bukkit.getOnlinePlayers().toArray(new Player[0]));
+	private void purgeAllBlocks(final CommandSender sender) {
+		sendGetAsync(getWebsite() + "DeleteAll?uuid=" + key, new GetFinished() {
+			public void response(String response) {
+				blocks = new ArrayList<UrlBlock>();
+				sender.sendMessage("Purged all blocks.");
+				getResourcePack(Bukkit.getOnlinePlayers().toArray(new Player[0]));				
+			}
+		});
 	}
 
 	boolean isInteger(String s) {
@@ -250,6 +264,7 @@ public class Main extends JavaPlugin implements Listener{
 	void displayHelp(CommandSender sender, boolean isPlayer) {
 		sender.sendMessage("--- UrlToBlock Help ---");
 		sender.sendMessage("/ub add <image url> - Create a block");
+		sender.sendMessage("/ub addTile <image url> <width> <height> - Create tiled blocks");
 		sender.sendMessage("/ub remove <id> - Remove a block");
 		sender.sendMessage("/ub dump - Dump debug info");
 		if(isPlayer) {
@@ -262,28 +277,64 @@ public class Main extends JavaPlugin implements Listener{
 		sender.sendMessage("-----------------------");
 	}
 
-	//Adds a block to the game
-	void addBlock(CommandSender sender, String blockurl) {
+	String urlEncode(String urlParam)
+	{
 		try {
-			String url = website + "AddTexture?uuid=" + key + "&texture=" + URLEncoder.encode(blockurl, "UTF-8");
-			String responce = sendGet(url);
-			if(responce.startsWith("@")) {
-				String error = "Uh Oh! Something bad happened! Error Code: " + responce;
-				sender.sendMessage(ChatColor.RED + error);
-				getLogger().warning(error);
-				return;
-			}else {
-				blocks.add(new UrlBlock(Integer.parseInt(responce)));
-				sender.sendMessage("Success!");
-				if(sender instanceof Player) {
-					addBlock((Player)sender, (short)Integer.parseInt(responce));
-				}
-			}
-
-		} catch (Exception e) {
-			e.printStackTrace();
+			return URLEncoder.encode(urlParam, "UTF-8");
 		}
-			getResourcePack(Bukkit.getOnlinePlayers().toArray(new Player[0]));
+		catch (Exception e) {
+			return "";
+		}
+	}
+	
+	//Adds a block to the game
+	void addBlock(final CommandSender sender, final String blockurl) {
+		String url = getWebsite() + "AddTexture?uuid=" + key + "&texture=" + urlEncode(blockurl);
+		sendGetAsync(url, new GetFinished() {
+			@Override
+			public void response(String responce) {
+				// TODO Auto-generated method stub
+				if(responce.startsWith("@")) {
+					String error = "Uh Oh! Something bad happened! Error Code: " + responce;
+					sender.sendMessage(ChatColor.RED + error);
+					getLogger().warning(error);
+					return;
+				}else {
+					blocks.add(new UrlBlock(Integer.parseInt(responce)));
+					sender.sendMessage("Success!");
+					if(sender instanceof Player) {
+						addBlock((Player)sender, (short)Integer.parseInt(responce));
+					}
+				}
+				getResourcePack(Bukkit.getOnlinePlayers().toArray(new Player[0]));
+			}
+		});
+	}
+
+	//Adds a block to the game
+	void addTileBlock(final CommandSender sender, String blockurl, int width, int height) {
+		String url = getWebsite() + "AddTiled?uuid=" + key + "&texture=" + urlEncode(blockurl) + "&width=" + width + "&height=" + height;
+		sendGetAsync(url, new GetFinished() {
+			public void response(String responce) {
+				if(responce.startsWith("@")) {
+					String error = "Uh Oh! Something bad happened! Error Code: " + responce;
+					sender.sendMessage(ChatColor.RED + error);
+					getLogger().warning(error);
+					return;
+				}else {
+					String[] arrayResponce = responce.split(",");
+					for(String num:arrayResponce) {
+						blocks.add(new UrlBlock(Integer.parseInt(num)));
+						if(sender instanceof Player) {
+							addBlock((Player)sender, (short)Integer.parseInt(num));
+						}
+					}
+					sender.sendMessage("Success!");
+
+				}
+				getResourcePack(Bukkit.getOnlinePlayers().toArray(new Player[0]));
+			}
+		});
 	}
 
 	@EventHandler //gives the new joined player the resource pack
@@ -307,114 +358,116 @@ public class Main extends JavaPlugin implements Listener{
 
 	//Send the resourcepack to the player
 	void getResourcePack(final Player... player) {
-		try {
-			String url = website + "GetUrl?uuid=" + key + "&spawner=" + noParticles;
-			if(hasExternalResourcePack()) {
+		String url = getWebsite() + "GetUrl?uuid=" + key + "&spawner=" + noParticles;
+		if(hasExternalResourcePack()) {
+			try {
 				url+= "&merge=" + URLEncoder.encode(getConfig().getString("existing-resource-pack"), "UTF-8");
+			} catch (UnsupportedEncodingException e) {
+				e.printStackTrace();
 			}
-			final String finalUrl = url;
-			new BukkitRunnable() {
-				public void run() {
-					String responce = sendGet(finalUrl);
-					if(responce.startsWith("@")) {
-						getLogger().warning("Uh Oh! Something bad happened! Error Code: " + responce);
-						return;
-					}else {
-						responce = responce + "?a=" + rand.nextInt(); //get around minecraft's cashing of resource packs
-						final String finalResponce = responce;
-						new BukkitRunnable() {
-							public void run() {
-								for(Player p:player) {
-									p.setResourcePack(finalResponce);
-								}
-							}
-						}.runTask(Main.plugin);
-
-					}
-				}
-			}.runTaskAsynchronously(this);
-
-
-		} catch (Exception e) {
-			e.printStackTrace();
 		}
+		
+		sendGetAsync(url, new GetFinished() {
+			public void response(String responce) {
+				if(responce.startsWith("@")) {
+					getLogger().warning("Uh Oh! Something bad happened! Error Code: " + responce);
+					return;
+				}else {
+					responce = responce + "?a=" + rand.nextInt(); //get around minecraft's cashing of resource packs
+					for(Player p:player) {
+						p.setResourcePack(responce);
+					}
+				}		
+			}
+		});
 	}
 
-	//Send a get request to the backend
-	String sendGet(String url) {
-		getLogger().warning("URL: " + url);
-		try {
-			URL obj = new URL(url);
-			HttpURLConnection con = (HttpURLConnection) obj.openConnection();
+	// Send a get request to the backend, asyncronously. When the response is received,
+	// calls the "response" function on the object "whenFinished", passing the response
+	// from the GET.
+	void sendGetAsync(final String url, final GetFinished whenFinished) {
+		new BukkitRunnable() {
+			public void run() {
+				String getResponse;
+				try {
+					URL obj = new URL(url);
+					HttpURLConnection con = (HttpURLConnection) obj.openConnection();
 
-			con.setRequestMethod("GET");
+					con.setRequestMethod("GET");
 
-			BufferedReader in = new BufferedReader(
-					new InputStreamReader(con.getInputStream()));
-			String inputLine;
-			StringBuffer response = new StringBuffer();
+					BufferedReader in = new BufferedReader(
+							new InputStreamReader(con.getInputStream()));
+					String inputLine;
+					StringBuffer response = new StringBuffer();
 
-			while ((inputLine = in.readLine()) != null) {
-				response.append(inputLine);
+					while ((inputLine = in.readLine()) != null) {
+						response.append(inputLine);
+					}
+					in.close();
+					getResponse = response.toString();
+				} catch(Exception e) {
+					e.printStackTrace();
+					getResponse = "@Texture Server seems to be offline. Please try again later.";
+				}
+				final String responseToSend = getResponse;
+				
+				new BukkitRunnable() {
+					public void run() {
+						whenFinished.response(responseToSend);
+					}
+				}.runTask(Main.plugin);
 			}
-			in.close();
-			return response.toString();
-		}catch(Exception e) {
-			e.printStackTrace();
-			return "@Texture Server seems to be offline. Please try again later.";
-		}
-
-
-
+		}.runTaskAsynchronously(Main.plugin);
 	}
 
 	//Removed a block from the arraylist and from the backend server
 	void removeBlock(CommandSender sender, int damage) {
 		for(UrlBlock b:blocks) {
 			if(b.getDamage() == damage) {
-				blocks.remove(b);
-				try {
-					String url = website + "DeleteTexture?uuid=" + key + "&damage=" + damage;
-					String responce = sendGet(url);
-					if(responce.startsWith("@")) {
-						String error = "Uh Oh! Something bad happened! Error Code: " + responce;
-						sender.sendMessage(ChatColor.RED + error);
-						getLogger().warning(error);
-						return;
-					}
-				} catch (Exception e) {
-					new ReportError(e, sender);
-					//e.printStackTrace();
-				}
-				sender.sendMessage("Successfully removed block!");
+				removeSingleBlock(sender, b);
 				return;
 			}
 		}
 		sender.sendMessage("Failed to remove block with id: " + damage);
 	}
+	
+	void removeSingleBlock(final CommandSender sender, UrlBlock b)
+	{
+		blocks.remove(b);
+		String url = getWebsite() + "DeleteTexture?uuid=" + key + "&damage=" + b.getDamage();
+		sendGetAsync(url, new GetFinished() {
+			public void response(String responce) {
+				if(responce.startsWith("@")) {
+					String error = "Uh Oh! Something bad happened! Error Code: " + responce;
+					sender.sendMessage(ChatColor.RED + error);
+					getLogger().warning(error);
+					return;
+				}
+
+				sender.sendMessage("Successfully removed block!");				
+			}
+		});
+	}
 
 	//Get a list of damage ids from the backend server so we can populate the gui of past blocks we made
 	void populateBlockListFromServer() {
-		try {
-			String url = website + "GetTextures?uuid=" + key;
-			String responce = sendGet(url);
-			if(responce.equals("")) {
-				return;
-			}
-			if(responce.startsWith("@")) {
-				getLogger().warning("Uh Oh! Something bad happened! Error Code: " + responce);
-				return;
-			}else {
-				String[] arrayResponce = responce.split(",");
-				for(String num:arrayResponce) {
-					blocks.add(new UrlBlock(Integer.parseInt(num)));
+		String url = getWebsite() + "GetTextures?uuid=" + key;
+		sendGetAsync(url, new GetFinished() {
+			public void response(String responce) {
+				if(responce.equals("")) {
+					return;
 				}
+				if(responce.startsWith("@")) {
+					getLogger().warning("Uh Oh! Something bad happened! Error Code: " + responce);
+					return;
+				}else {
+					String[] arrayResponce = responce.split(",");
+					for(String num:arrayResponce) {
+						blocks.add(new UrlBlock(Integer.parseInt(num)));
+					}
+				}			
 			}
-
-		} catch (Exception e) {
-			new ReportError(e);
-			e.printStackTrace();
-		}
+		});
 	}
 
 	//Show block GUI to a player (Starts at page 0)
@@ -709,3 +762,10 @@ public class Main extends JavaPlugin implements Listener{
 	}
 
 }
+
+abstract class GetFinished
+{
+	public abstract void response(String response);
+}
+
+
