@@ -11,6 +11,7 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Random;
 import java.util.UUID;
@@ -232,9 +233,7 @@ public class Main extends JavaPlugin implements Listener{
 		}
 		blocks = new ArrayList<UrlBlock>();
 		sender.sendMessage("Purged all blocks.");
-		for(Player all:Bukkit.getOnlinePlayers()) {
-			getResourcePack(all);
-		}
+		getResourcePack(Bukkit.getOnlinePlayers().toArray(new Player[0]));
 	}
 
 	boolean isInteger(String s) {
@@ -284,9 +283,7 @@ public class Main extends JavaPlugin implements Listener{
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
-		for(Player all:Bukkit.getOnlinePlayers()) {
-			getResourcePack(all);
-		}
+			getResourcePack(Bukkit.getOnlinePlayers().toArray(new Player[0]));
 	}
 
 	@EventHandler //gives the new joined player the resource pack
@@ -309,22 +306,34 @@ public class Main extends JavaPlugin implements Listener{
 	}
 
 	//Send the resourcepack to the player
-	void getResourcePack(Player p) {
+	void getResourcePack(final Player... player) {
 		try {
 			String url = website + "GetUrl?uuid=" + key + "&spawner=" + noParticles;
 			if(hasExternalResourcePack()) {
 				url+= "&merge=" + URLEncoder.encode(getConfig().getString("existing-resource-pack"), "UTF-8");
 			}
+			final String finalUrl = url;
+			new BukkitRunnable() {
+				public void run() {
+					String responce = sendGet(finalUrl);
+					if(responce.startsWith("@")) {
+						getLogger().warning("Uh Oh! Something bad happened! Error Code: " + responce);
+						return;
+					}else {
+						responce = responce + "?a=" + rand.nextInt(); //get around minecraft's cashing of resource packs
+						final String finalResponce = responce;
+						new BukkitRunnable() {
+							public void run() {
+								for(Player p:player) {
+									p.setResourcePack(finalResponce);
+								}
+							}
+						}.runTask(Main.plugin);
 
-			String responce = sendGet(url);
-			if(responce.startsWith("@")) {
-				getLogger().warning("Uh Oh! Something bad happened! Error Code: " + responce);
-				return;
-			}else {
-				responce = responce + "?a=" + rand.nextInt(); //get around minecraft's cashing of resource packs
-				p.setResourcePack(responce);
+					}
+				}
+			}.runTaskAsynchronously(this);
 
-			}
 
 		} catch (Exception e) {
 			e.printStackTrace();
@@ -333,6 +342,7 @@ public class Main extends JavaPlugin implements Listener{
 
 	//Send a get request to the backend
 	String sendGet(String url) {
+		getLogger().warning("URL: " + url);
 		try {
 			URL obj = new URL(url);
 			HttpURLConnection con = (HttpURLConnection) obj.openConnection();
@@ -350,6 +360,7 @@ public class Main extends JavaPlugin implements Listener{
 			in.close();
 			return response.toString();
 		}catch(Exception e) {
+			e.printStackTrace();
 			return "@Texture Server seems to be offline. Please try again later.";
 		}
 
