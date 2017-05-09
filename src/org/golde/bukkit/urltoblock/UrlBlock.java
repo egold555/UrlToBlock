@@ -1,5 +1,7 @@
 package org.golde.bukkit.urltoblock;
 
+import java.util.Arrays;
+
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
@@ -13,14 +15,21 @@ public class UrlBlock {
 	private ItemStack handItem;
 	private short damage;
 	private int data;
-
+	private static final String noLore = "";
 	public UrlBlock(int data) {
+		this(data, ChatColor.RESET + "UrlBlock - " + data, noLore);
+	}
+	
+	public UrlBlock(int data, String name, String... lore) {
 		this.data = data;
 		handItem = new ItemStack(Material.DIAMOND_AXE);
 		handItem.setDurability((short)data);
 
 		ItemMeta meta = handItem.getItemMeta();
-		meta.setDisplayName(ChatColor.RESET + "UrlBlock - " + data);
+		meta.setDisplayName(name);
+		if(!lore[0].equals(noLore)) {
+			meta.setLore(Arrays.asList(lore));
+		}
 		meta.setUnbreakable(true);
 		meta.addItemFlags(ItemFlag.HIDE_UNBREAKABLE, ItemFlag.HIDE_ATTRIBUTES);
 
@@ -32,6 +41,7 @@ public class UrlBlock {
 		return handItem;
 	}
 
+	@Deprecated
 	public ItemStack getGuiItem() {
 		return handItem.clone();
 	}

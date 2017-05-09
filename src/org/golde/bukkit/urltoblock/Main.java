@@ -52,9 +52,11 @@ import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.golde.bukkit.urltoblock.ChestGUI.OptionClickEvent;
 import org.golde.bukkit.urltoblock.ChestGUI.OptionClickEventHandler;
+import org.golde.bukkit.urltoblock.api.UrlToBlockAPI;
 import org.golde.bukkit.urltoblock.api.events.UrlBlockBreakEvent;
 import org.golde.bukkit.urltoblock.api.events.UrlBlockClickEvent;
 import org.golde.bukkit.urltoblock.api.events.UrlBlockPlaceEvent;
+import org.golde.bukkit.urltoblock.api.events.UrlBlockPopulateEvent;
 import org.golde.bukkit.urltoblock.dump.DumpException;
 import org.golde.bukkit.urltoblock.dump.ReportError;
 
@@ -70,7 +72,7 @@ public class Main extends JavaPlugin implements Listener{
 	final boolean DEV = true;
 	String key = "NO_KEY";
 	Random rand = new Random();
-	List<UrlBlock> blocks = new ArrayList<UrlBlock>();
+	public List<UrlBlock> blocks = new ArrayList<UrlBlock>();
 	public static Main plugin;
 	public ServerType SERVER_TYPE;
 	public void onEnable() {
@@ -148,7 +150,7 @@ public class Main extends JavaPlugin implements Listener{
 
 		if(args.length == 1) {
 			l.add("add");
-			l.add("addTile");
+			l.add("addtile");
 			l.add("remove");
 			l.add("reload");
 			l.add("silent");
@@ -192,7 +194,7 @@ public class Main extends JavaPlugin implements Listener{
 			}
 			return true;
 		}
-		else if(args[0].equalsIgnoreCase("addTile")) {
+		else if(args[0].equalsIgnoreCase("addtile")) {
 			if(args.length != 4) {
 				displayHelp(sender, isPlayer);
 				return true;
@@ -264,7 +266,7 @@ public class Main extends JavaPlugin implements Listener{
 	void displayHelp(CommandSender sender, boolean isPlayer) {
 		sender.sendMessage("--- UrlToBlock Help ---");
 		sender.sendMessage("/ub add <image url> - Create a block");
-		sender.sendMessage("/ub addTile <image url> <width> <height> - Create tiled blocks");
+		sender.sendMessage("/ub addtile <image url> <width> <height> - Create tiled blocks");
 		sender.sendMessage("/ub remove <id> - Remove a block");
 		sender.sendMessage("/ub dump - Dump debug info");
 		if(isPlayer) {
@@ -289,6 +291,7 @@ public class Main extends JavaPlugin implements Listener{
 	
 	//Adds a block to the game
 	void addBlock(final CommandSender sender, final String blockurl) {
+		sender.sendMessage("Your request is being prossessed... Please wait.");
 		String url = getWebsite() + "AddTexture?uuid=" + key + "&texture=" + urlEncode(blockurl);
 		sendGetAsync(url, new GetFinished() {
 			@Override
@@ -313,6 +316,7 @@ public class Main extends JavaPlugin implements Listener{
 
 	//Adds a block to the game
 	void addTileBlock(final CommandSender sender, String blockurl, int width, int height) {
+		sender.sendMessage("Your request is being prossessed... Please wait.");
 		String url = getWebsite() + "AddTiled?uuid=" + key + "&texture=" + urlEncode(blockurl) + "&width=" + width + "&height=" + height;
 		sendGetAsync(url, new GetFinished() {
 			public void response(String responce) {
@@ -357,7 +361,7 @@ public class Main extends JavaPlugin implements Listener{
 	}
 
 	//Send the resourcepack to the player
-	void getResourcePack(final Player... player) {
+	public void getResourcePack(final Player... player) {
 		String url = getWebsite() + "GetUrl?uuid=" + key + "&spawner=" + noParticles;
 		if(hasExternalResourcePack()) {
 			try {
@@ -465,6 +469,7 @@ public class Main extends JavaPlugin implements Listener{
 					for(String num:arrayResponce) {
 						blocks.add(new UrlBlock(Integer.parseInt(num)));
 					}
+					callEvent(new UrlBlockPopulateEvent());
 				}			
 			}
 		});
@@ -634,7 +639,7 @@ public class Main extends JavaPlugin implements Listener{
 		p.saveData();
 	}
 
-	ItemStack fixAttackSpeed(Player p, ItemStack item) {
+	public ItemStack fixAttackSpeed(Player p, ItemStack item) {
 		try {
 			net.minecraft.server.v1_11_R1.ItemStack nmsStack = CraftItemStack.asNMSCopy(item);
 			NBTTagCompound compound = (nmsStack.hasTag()) ? nmsStack.getTag() : new NBTTagCompound();

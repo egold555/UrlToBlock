@@ -9,10 +9,14 @@ import org.bukkit.event.HandlerList;
 public class UrlBlockPlaceEvent extends Event implements Cancellable {
 
 	private static final HandlerList handlers = new HandlerList();
-	@Override
+
 	public HandlerList getHandlers() {
-	    return handlers;
-	}
+        return handlers;
+    }
+
+    public static HandlerList getHandlerList() { //I hate bukkit. All my other events dont need this lile exept for this one. WHY
+        return handlers;
+    }
 
 	private Location loc;
 	private short id;

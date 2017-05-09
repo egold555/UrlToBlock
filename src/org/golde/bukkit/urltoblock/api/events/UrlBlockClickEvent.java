@@ -10,10 +10,14 @@ import org.bukkit.inventory.EquipmentSlot;
 public class UrlBlockClickEvent extends Event {
 
 	private static final HandlerList handlers = new HandlerList();
-	@Override
+
 	public HandlerList getHandlers() {
-	    return handlers;
-	}
+        return handlers;
+    }
+
+    public static HandlerList getHandlerList() { //I hate bukkit. All my other events dont need this lile exept for this one. WHY
+        return handlers;
+    }
 	
 	private Player player;
 	private int id;
