@@ -10,6 +10,7 @@ import java.io.InputStreamReader;
 import java.io.UnsupportedEncodingException;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.List;
@@ -52,6 +53,8 @@ import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.golde.bukkit.urltoblock.ChestGUI.OptionClickEvent;
 import org.golde.bukkit.urltoblock.ChestGUI.OptionClickEventHandler;
+import org.golde.bukkit.urltoblock.Updater.UpdateResult;
+import org.golde.bukkit.urltoblock.Updater.UpdateResults;
 import org.golde.bukkit.urltoblock.api.UrlToBlockAPI;
 import org.golde.bukkit.urltoblock.api.events.UrlBlockBreakEvent;
 import org.golde.bukkit.urltoblock.api.events.UrlBlockClickEvent;
@@ -69,7 +72,7 @@ import net.minecraft.server.v1_11_R1.PacketPlayOutAnimation;
 
 public class Main extends JavaPlugin implements Listener{
 
-	final boolean DEV = true;
+	public static final boolean DEV = true;
 	String key = "NO_KEY";
 	Random rand = new Random();
 	public List<UrlBlock> blocks = new ArrayList<UrlBlock>();
@@ -96,26 +99,48 @@ public class Main extends JavaPlugin implements Listener{
 	}
 
 	void checkForUpdates(){
-		Updater updater = new Updater("40330"); 
-		Updater.UpdateResults result = updater.checkForUpdates();
-		if(result.getResult() == Updater.UpdateResult.FAIL)
+		Updater updater = new Updater(this, "40330"); 
+		UpdateResults result = updater.checkForUpdates();
+		
+		
+		if(result.getResult() == UpdateResult.FAIL)
 		{
 			getLogger().severe("Update checker failed to check for updates!");
 			getLogger().severe("Stacktrace: " + result.getVersion());
 		}
-		else if(result.getResult() == Updater.UpdateResult.NO_UPDATE)
+		else if(result.getResult() == UpdateResult.NO_UPDATE)
 		{
 			getLogger().info("No update available");
 		}
-		else if(result.getResult() == Updater.UpdateResult.UPDATE_AVAILABLE)
+		else if(result.getResult() == UpdateResult.UPDATE_AVAILABLE)
 		{
-			Bukkit.getConsoleSender().sendMessage("[UrlToBlock] §aAn update for UrlToBlock has been found!");
-			Bukkit.getConsoleSender().sendMessage("[UrlToBlock] §bCurrent version: §e" + getDescription().getVersion() + "§b, new version: §e" + result.getVersion());
+			consoleMsg("§aAn update for UrlToBlock has been found!");
+			consoleMsg("§bCurrent version: §e" + getDescription().getVersion() + "§b, new version: §e" + result.getVersion());
+			
+			UpdateResults dlResult = updater.downloadUpdate();
+			if(dlResult.getResult() == UpdateResult.FAIL) {
+				getLogger().severe("Update downloader failed to download updates!");
+				getLogger().severe("Stacktrace: " + result.getVersion());
+			}
+			else if(dlResult.getResult() == UpdateResult.UPDATE_SUCCESS) {
+				consoleMsg("§aThe update has been downloaded! Please restart your server.");
+				Bukkit.getPluginManager().disablePlugin(this);
+			}
+			else if(dlResult.getResult() == UpdateResult.DISABLED && result.getResult() == UpdateResult.UPDATE_AVAILABLE) {
+				getLogger().warning("There is an update available but you have auto-update-downloads disabled.");
+			}
+			
 		}
 		else if (result.getResult() == Updater.UpdateResult.DEV){
-			Bukkit.getConsoleSender().sendMessage("[UrlToBlock] §eYou seem to have a version of the plugin that is not on spigot...");
-			Bukkit.getConsoleSender().sendMessage("[UrlToBlock] §cExpect bugs!");
+			Bukkit.getConsoleSender().sendMessage("§eYou seem to have a version of the plugin that is not on spigot...");
+			consoleMsg("§cExpect bugs!");
 		}
+		
+		
+	}
+	
+	void consoleMsg(String msg) {
+		Bukkit.getConsoleSender().sendMessage("[UrlToBlock] " + msg);
 	}
 
 	boolean noParticles = true;
@@ -211,6 +236,15 @@ public class Main extends JavaPlugin implements Listener{
 			addBlock(sender, args[1]);
 			return true;
 		}
+		
+		else if(args[0].equalsIgnoreCase("rename")) {
+			if(args.length != 3) {
+				displayHelp(sender, isPlayer);
+				return true;
+			}
+			renameBlock(sender, getBlockByDamageValue(Short.valueOf(args[1])), args[2]);
+			return true;
+		}
 
 		else if(args[0].equalsIgnoreCase("remove") || args[0].equalsIgnoreCase("delete")) {
 			if(args.length != 2 || !isInteger(args[1])) {
@@ -269,6 +303,7 @@ public class Main extends JavaPlugin implements Listener{
 		sender.sendMessage("/ub addtile <image url> <width> <height> - Create tiled blocks");
 		sender.sendMessage("/ub remove <id> - Remove a block");
 		sender.sendMessage("/ub dump - Dump debug info");
+		sender.sendMessage("/ub rename <id> <name> - Dump debug info");
 		if(isPlayer) {
 			sender.sendMessage("/ub gui - Open gui of all created blocks");
 		}
@@ -288,7 +323,7 @@ public class Main extends JavaPlugin implements Listener{
 			return "";
 		}
 	}
-	
+
 	//Adds a block to the game
 	void addBlock(final CommandSender sender, final String blockurl) {
 		sender.sendMessage("Your request is being prossessed... Please wait.");
@@ -296,7 +331,6 @@ public class Main extends JavaPlugin implements Listener{
 		sendGetAsync(url, new GetFinished() {
 			@Override
 			public void response(String responce) {
-				// TODO Auto-generated method stub
 				if(responce.startsWith("@")) {
 					String error = "Uh Oh! Something bad happened! Error Code: " + responce;
 					sender.sendMessage(ChatColor.RED + error);
@@ -309,6 +343,7 @@ public class Main extends JavaPlugin implements Listener{
 						addBlock((Player)sender, (short)Integer.parseInt(responce));
 					}
 				}
+				populateBlockListFromServer();
 				getResourcePack(Bukkit.getOnlinePlayers().toArray(new Player[0]));
 			}
 		});
@@ -336,6 +371,7 @@ public class Main extends JavaPlugin implements Listener{
 					sender.sendMessage("Success!");
 
 				}
+				populateBlockListFromServer();
 				getResourcePack(Bukkit.getOnlinePlayers().toArray(new Player[0]));
 			}
 		});
@@ -347,6 +383,7 @@ public class Main extends JavaPlugin implements Listener{
 			@Override
 			public void run() {
 				getResourcePack(e.getPlayer());
+				fixAttackSpeedForInventory(e.getPlayer());
 			}
 		}.runTaskLater(this, 2);
 
@@ -362,7 +399,7 @@ public class Main extends JavaPlugin implements Listener{
 
 	//Send the resourcepack to the player
 	public void getResourcePack(final Player... player) {
-		String url = getWebsite() + "GetUrl?uuid=" + key + "&spawner=" + noParticles;
+		String url = getWebsite() + "GetUrl?uuid=" + key + "&spawner=" + noParticles + "&transparent=" + getConfig().getBoolean("noSpawnerTexture", false);
 		if(hasExternalResourcePack()) {
 			try {
 				url+= "&merge=" + URLEncoder.encode(getConfig().getString("existing-resource-pack"), "UTF-8");
@@ -370,7 +407,7 @@ public class Main extends JavaPlugin implements Listener{
 				e.printStackTrace();
 			}
 		}
-		
+
 		sendGetAsync(url, new GetFinished() {
 			public void response(String responce) {
 				if(responce.startsWith("@")) {
@@ -414,7 +451,7 @@ public class Main extends JavaPlugin implements Listener{
 					getResponse = "@Texture Server seems to be offline. Please try again later.";
 				}
 				final String responseToSend = getResponse;
-				
+
 				new BukkitRunnable() {
 					public void run() {
 						whenFinished.response(responseToSend);
@@ -434,7 +471,7 @@ public class Main extends JavaPlugin implements Listener{
 		}
 		sender.sendMessage("Failed to remove block with id: " + damage);
 	}
-	
+
 	void removeSingleBlock(final CommandSender sender, UrlBlock b)
 	{
 		blocks.remove(b);
@@ -452,10 +489,27 @@ public class Main extends JavaPlugin implements Listener{
 			}
 		});
 	}
-
+	
+	void renameBlock(final CommandSender sender, final UrlBlock block, final String newName) {
+		String url = getWebsite() + "Rename?uuid=" + key + "&damage=" + block.getDamage() + "&name=" + urlEncode(newName);
+		sendGetAsync(url, new GetFinished() {
+			public void response(String responce) {
+				if(responce.startsWith("@")) {
+					String error = "Uh Oh! Something bad happened! Error Code: " + responce;
+					sender.sendMessage(ChatColor.RED + error);
+					getLogger().warning(error);
+					return;
+				}
+				block.setName(newName);
+				refreshEveryonesUrlBlock();
+				sender.sendMessage("Successfully renamed block!");				
+			}
+		});
+	}
+	
 	//Get a list of damage ids from the backend server so we can populate the gui of past blocks we made
 	void populateBlockListFromServer() {
-		String url = getWebsite() + "GetTextures?uuid=" + key;
+		String url = getWebsite() + "GetTexturesAndNames?uuid=" + key;
 		sendGetAsync(url, new GetFinished() {
 			public void response(String responce) {
 				if(responce.equals("")) {
@@ -465,11 +519,29 @@ public class Main extends JavaPlugin implements Listener{
 					getLogger().warning("Uh Oh! Something bad happened! Error Code: " + responce);
 					return;
 				}else {
-					String[] arrayResponce = responce.split(",");
-					for(String num:arrayResponce) {
-						blocks.add(new UrlBlock(Integer.parseInt(num)));
+					blocks = new ArrayList<UrlBlock>();
+					try {
+						for (String line: responce.split("\\|")) {
+							String[] fields = line.split("&", -1);
+							if (fields.length == 3) {
+								int num = Integer.parseInt(fields[0]);
+								String name = URLDecoder.decode(fields[1], "UTF-8");
+								String lore = URLDecoder.decode(fields[2], "UTF-8");
+								
+								if (name.equals("")) {
+									blocks.add(new UrlBlock(num));
+								}
+								else {
+									blocks.add(new UrlBlock(num, name, lore.split("\r\n")));
+								}
+							}
+						}
+						refreshEveryonesUrlBlock();
+						callEvent(new UrlBlockPopulateEvent());
 					}
-					callEvent(new UrlBlockPopulateEvent());
+					catch (Exception e) {
+						new ReportError(e);
+					}
 				}			
 			}
 		});
@@ -480,7 +552,7 @@ public class Main extends JavaPlugin implements Listener{
 		int numberOfPages = 1 + (blocks.size() - 1) / 45;
 
 
-		ChestGUI gui = new ChestGUI("UrlToBlock", 54, new OptionClickEventHandler(){
+		ChestGUI gui = new ChestGUI("UrlToBlock - " + (pageNumber + 1), 54, new OptionClickEventHandler(){
 
 			@Override
 			public void onOptionClick(OptionClickEvent e) {
@@ -499,7 +571,11 @@ public class Main extends JavaPlugin implements Listener{
 					}.runTaskLater(Main.this, 2);
 				}
 				else {
-					addBlock(p, e.getItem().getDurability());
+					if(e.getClickEvent().getClick().isShiftClick()) {
+						addBlock(p, e.getItem().getDurability(), 64);
+					}else {
+						addBlock(p, e.getItem().getDurability());
+					}
 				}
 				e.setWillClose(true);
 				e.setWillDestroy(true);
@@ -530,6 +606,7 @@ public class Main extends JavaPlugin implements Listener{
 
 	//Is a url block item
 	public boolean isUrlBlockItem(ItemStack i) {
+		if(i == null) {return false;}
 		for(UrlBlock b:blocks) {
 			if(b.getDamage() == i.getDurability() && i.getItemMeta().isUnbreakable() && (i.getType() == Material.DIAMOND_AXE || i.getType() == Material.DIAMOND_HOE)) {
 				return true;
@@ -539,9 +616,28 @@ public class Main extends JavaPlugin implements Listener{
 	}
 
 	void addBlock(Player p, short data) {
+		addBlock(p, data, 1);
+	}
+	void addBlock(Player p, short data, int amount) {
 		ItemStack i = getBlockByDamageValue(data).getHandItem();
+		i.setAmount(amount);
 		i = fixAttackSpeed(p, i);
 		p.getInventory().addItem(i);
+	}
+	
+	void refreshEveryonesUrlBlock() {
+		for(Player p:Bukkit.getOnlinePlayers()) {
+			PlayerInventory pinv = p.getInventory();
+			for (int i = 0; i < pinv.getSize(); i++) {
+                ItemStack item = pinv.getItem(i);
+                if(isUrlBlockItem(item)) {
+                	UrlBlock urlBlock = getBlockByDamageValue(item.getDurability());
+                	pinv.setItem(i, urlBlock.getHandItem());
+                }
+			}
+			
+			p.updateInventory();
+		}
 	}
 
 	@EventHandler (ignoreCancelled = true) //TODO: Temporary because I messed up
@@ -610,7 +706,7 @@ public class Main extends JavaPlugin implements Listener{
 
 		if(!cancled) {
 			urlBlock.placeBlock(e.getPlayer(), blockClicked.getX() + clickedBlockFace.getModX(), blockClicked.getY() + clickedBlockFace.getModY(), blockClicked.getZ() + clickedBlockFace.getModZ());
-			world.playSound(e.getClickedBlock().getLocation(), Sound.BLOCK_METAL_PLACE, 1, 0);
+			world.playSound(e.getClickedBlock().getLocation(), Sound.BLOCK_METAL_PLACE, 1, 1);
 			armSwingAnimation(e.getPlayer());
 			removeItemFromPlayer(e.getPlayer(), e.getItem());
 		}
@@ -639,6 +735,17 @@ public class Main extends JavaPlugin implements Listener{
 		p.saveData();
 	}
 
+	public void fixAttackSpeedForInventory(Player p) {
+		PlayerInventory pinv = p.getInventory();
+		for (int i = 0; i < pinv.getSize(); i++) {
+            ItemStack item = pinv.getItem(i);
+            if(isUrlBlockItem(item)) {
+            	fixAttackSpeed(p, item);
+            }
+		}
+		p.updateInventory();
+	}
+	
 	public ItemStack fixAttackSpeed(Player p, ItemStack item) {
 		try {
 			net.minecraft.server.v1_11_R1.ItemStack nmsStack = CraftItemStack.asNMSCopy(item);
@@ -713,6 +820,7 @@ public class Main extends JavaPlugin implements Listener{
 		ItemStack i = e.getItem().getItemStack();
 		if(isUrlBlockItem(i)) {
 			stackItems(e);
+			e.getPlayer().getLocation().getWorld().playSound(e.getPlayer().getLocation(), Sound.ENTITY_ITEM_PICKUP, 1, 2);
 			e.getItem().remove();
 		}
 

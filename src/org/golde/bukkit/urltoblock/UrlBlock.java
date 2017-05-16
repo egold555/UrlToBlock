@@ -36,14 +36,21 @@ public class UrlBlock {
 		handItem.setItemMeta(meta);
 		damage = (short)data;
 	}
+	
+	public void setName(String name) {
+		ItemMeta meta = handItem.getItemMeta();
+		meta.setDisplayName(name);
+		handItem.setItemMeta(meta);
+	}
 
 	public ItemStack getHandItem() {
 		return handItem;
 	}
 
-	@Deprecated
 	public ItemStack getGuiItem() {
-		return handItem.clone();
+		ItemStack i = handItem.clone();
+		i.setAmount(1);
+		return i;
 	}
 
 	public short getDamage() {
@@ -58,6 +65,6 @@ public class UrlBlock {
 	}
 
 	private String spawnerCommand(int data, int x, int y, int z) {
-		return "setblock " + x + " " + y + " " + z + " minecraft:mob_spawner 0 replace {SpawnData:{id:minecraft:armor_stand,ArmorItems:[{},{},{},{}],HandItems:[{id:minecraft:diamond_hoe,Count:1,Damage:%d%,tag:{Unbreakable:1}},{}],Pose:{RightArm:[30f,0f,0f],LeftArm:[30f,0f,0f]}},RequiredPlayerRange:0.000001,MaxNearbyEntities:0}".replace("%d%", String.valueOf(data));
+		return "setblock " + x + " " + y + " " + z + " minecraft:mob_spawner 0 replace {SpawnData:{id:minecraft:armor_stand,ArmorItems:[{},{},{},{}],HandItems:[{id:minecraft:diamond_hoe,Count:1,Damage:%d%,tag:{Unbreakable:1}},{}],Pose:{RightArm:[30f,0f,0f],LeftArm:[30f,0f,0f]}},RequiredPlayerRange:0,MaxNearbyEntities:0}".replace("%d%", String.valueOf(data));
 	}
 }

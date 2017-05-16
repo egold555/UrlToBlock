@@ -1,8 +1,14 @@
 #Tells you when there is a new update for my plugin
 enable-update-checker: true
 
+#Auto download new update?
+auto-download-updates: true
+
 #If true no particle effects occur when breaking a custom block.
 noParticles: true
+
+#If true, the spawner texture will be fully transparent, if false, it will look like the normal spawner texture.
+noSpawnerTexture: false
 
 #If you have an existing server resource pack that should get applied to the client, put the url to the zip file here. 
 #If you do not have one, leave it as "NONE"

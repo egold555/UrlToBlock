@@ -20,6 +20,10 @@ public class ReportError {
 	}
 	
 	public ReportError(final Exception e, final CommandSender cs){
+		if(Main.DEV) {
+			e.printStackTrace();
+			return;
+		}
 		//makes a new dump and sends the user the link
 		final DumpTemplate dt = new DumpTemplate(e);
 		new BukkitRunnable(){
@@ -42,7 +46,7 @@ public class ReportError {
 			if(dt.isFromDumpCommand()){
 				sender.sendMessage(ChatColor.GREEN + "Dump has been created.");
 			}else{
-				sender.sendMessage(ChatColor.RED + "Uh Oh. It looks like an error occurred with CorpseReborn. Please screenshot this and send it to ericgolde555 on SpigotMC or email to plugins@golde.org");
+				sender.sendMessage(ChatColor.RED + "Uh Oh. It looks like an error occurred with UrlToBlock. Please screenshot this and send it to ericgolde555 on SpigotMC or email to plugins@golde.org");
 			}
 			
 			sender.sendMessage(ChatColor.YELLOW + url);

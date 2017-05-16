@@ -113,12 +113,12 @@ public class ChestGUI implements Listener {
 	void onInventoryClick(InventoryClickEvent event) {
 		if (event.getInventory().getTitle().equals(name) && (player == null || event.getWhoClicked() == player)) {
 			event.setCancelled(true);
-			if (event.getClick() != ClickType.LEFT)
+			if (event.getClick() != ClickType.LEFT && event.getClick() != ClickType.SHIFT_LEFT)
 				return;
 			int slot = event.getRawSlot();
 			if (slot >= 0 && slot < size && optionNames[slot] != null) {
 				Plugin plugin = this.plugin;
-				OptionClickEvent e = new OptionClickEvent(this, (Player) event.getWhoClicked(), slot, optionNames[slot], optionIcons[slot]);
+				OptionClickEvent e = new OptionClickEvent(this, (Player) event.getWhoClicked(), slot, optionNames[slot], optionIcons[slot], event);
 				handler.onOptionClick(e);
 				((Player) event.getWhoClicked()).updateInventory();
 				if (e.willClose()) {
@@ -148,8 +148,9 @@ public class ChestGUI implements Listener {
 		private boolean close;
 		private boolean destroy;
 		private ItemStack item;
+		private InventoryClickEvent inventoryClickEvent;
 
-		public OptionClickEvent(ChestGUI menu, Player player, int position, String name, ItemStack item) {
+		public OptionClickEvent(ChestGUI menu, Player player, int position, String name, ItemStack item, InventoryClickEvent inventoryClickEvent) {
 			this.iconMenu = menu;
 			this.player = player;
 			this.position = position;
@@ -157,6 +158,11 @@ public class ChestGUI implements Listener {
 			this.close = true;
 			this.destroy = false;
 			this.item = item;
+			this.inventoryClickEvent = inventoryClickEvent;
+		}
+		
+		public InventoryClickEvent getClickEvent() {
+			return inventoryClickEvent;
 		}
 		
 		public ChestGUI getIconMenu() {
