@@ -42,6 +42,11 @@ public class UrlBlock {
 		meta.setDisplayName(name);
 		handItem.setItemMeta(meta);
 	}
+	
+	public ItemStack getHandItem(int amount) {
+		handItem.setAmount(amount);
+		return handItem;
+	}
 
 	public ItemStack getHandItem() {
 		return handItem;

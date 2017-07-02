@@ -60,6 +60,8 @@ public class DumpTemplate {
 				NEW_LINE +
 				"UrlToBlock Version: " + Main.plugin.getDescription().getVersion().split(" ")[0] + 
 				NEW_LINE + 
+				"UUID Key: " + Main.plugin.key +
+				NEW_LINE +
 				NEW_LINE + 
 				"Server Version: " + Bukkit.getVersion() + 
 				NEW_LINE +
@@ -74,6 +76,7 @@ public class DumpTemplate {
 				NEW_LINE + 
 				getPlugins()+
 				NEW_LINE +
+				
 				"Config: " +
 				NEW_LINE +
 				getConfig().replaceAll("&", "*");
