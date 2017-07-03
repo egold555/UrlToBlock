@@ -70,6 +70,6 @@ public class UrlBlock {
 	}
 
 	private String spawnerCommand(int data, int x, int y, int z) {
-		return "setblock " + x + " " + y + " " + z + " minecraft:mob_spawner 0 replace {SpawnData:{id:minecraft:armor_stand,ArmorItems:[{},{},{},{}],HandItems:[{id:minecraft:diamond_hoe,Count:1,Damage:%d%,tag:{Unbreakable:1}},{}],Pose:{RightArm:[30f,0f,0f],LeftArm:[30f,0f,0f]}},RequiredPlayerRange:0,MaxNearbyEntities:0}".replace("%d%", String.valueOf(data));
+		return "setblock " + x + " " + y + " " + z + " minecraft:mob_spawner 0 replace {SpawnData:{id:minecraft:armor_stand,Invisible:1b,NoBasePlate:1b,ArmorItems:[{},{},{},{}],HandItems:[{id:minecraft:diamond_hoe,Count:1,Damage:%d%,tag:{Unbreakable:1}},{}],Pose:{RightArm:[30f,0f,0f],LeftArm:[30f,0f,0f]}},RequiredPlayerRange:0,MaxNearbyEntities:0}".replace("%d%", String.valueOf(data));
 	}
 }
