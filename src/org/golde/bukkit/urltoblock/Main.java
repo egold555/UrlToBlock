@@ -55,6 +55,7 @@ import org.bukkit.event.player.PlayerPickupItemEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
+import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.golde.bukkit.urltoblock.ChestGUI.OptionClickEvent;
@@ -191,6 +192,7 @@ public class Main extends JavaPlugin implements Listener{
 			}else {
 				l.add("purge");
 				l.add("saveResourcePackToComputer");
+				l.add("give");
 			}
 		}
 
@@ -224,7 +226,12 @@ public class Main extends JavaPlugin implements Listener{
 
 		if(args[0].equalsIgnoreCase("gui")) {
 			if(isPlayer) {
-				openGui((Player)sender, 0);
+				if(args[1] != null && isInteger(args[1])) {
+					openGui((Player)sender, Integer.valueOf(args[1]) - 1);
+				}else {
+					openGui((Player)sender, 0);
+				}
+				
 			}
 			return true;
 		}
@@ -283,12 +290,39 @@ public class Main extends JavaPlugin implements Listener{
 		}
 		else if(args[0].equalsIgnoreCase("dump")) {
 			new ReportError(new DumpException(), sender);
-		}else if(args[0].equalsIgnoreCase("stack")) {
+		}
+		else if(args[0].equalsIgnoreCase("stack")) {
 			if(!isPlayer) {
 				sender.sendMessage("Consoles do not have an inventory!");
 				return true;
 			}
 			stackAllUrlBlocks((Player)sender);
+		}
+		else if(args[0].equalsIgnoreCase("give")) {
+			if(isPlayer) {
+				sender.sendMessage("This command is for console only.");
+				return true;
+			}
+			
+			Player toGivePlayer = (args.length > 1) ? Bukkit.getPlayer(args[1]) : null;
+			if(toGivePlayer == null || !toGivePlayer.isOnline() || toGivePlayer.isBanned()) {
+				sender.sendMessage("Player does not exist.");
+				return true;
+			}
+			String blockNumber = (args.length > 2) ? args[2] : null;
+			
+			if(blockNumber == null || !isInteger(blockNumber)) {
+				sender.sendMessage("That is not a vallid UrlBlock!");
+				return true;
+			}
+			short theBlockNumber = (short)Integer.parseInt(blockNumber);
+			String blockAmount = (args.length > 3) ? args[3] : null;
+			if(blockAmount == null || !isInteger(blockAmount)) {
+				addBlock(toGivePlayer, (short)theBlockNumber);
+			}else {
+				addBlock(toGivePlayer, (short)theBlockNumber, Integer.parseInt(blockAmount));
+			}
+			
 		}
 		else {
 			displayHelp(sender, isPlayer);
@@ -312,6 +346,7 @@ public class Main extends JavaPlugin implements Listener{
 			if(!isPlayer) {
 				sender.sendMessage("/ub purge - Remove all blocks");
 				sender.sendMessage("/ub saveResourcePackToComputer - Saves the resourcepack to the computers file system in the plugins directory");
+				sender.sendMessage("/ub give <player> <id> [amount] - Give a player a block");
 			}
 			sender.sendMessage("/ub reload - Reloads config");
 			sender.sendMessage("-----------------------");
@@ -685,6 +720,11 @@ public class Main extends JavaPlugin implements Listener{
 		ItemStack i = getBlockByDamageValue(data).getHandItem();
 		i.setAmount(amount);
 		i = fixAttackSpeed(p, i);
+		ItemMeta im = i.getItemMeta();
+		List<String> lore = im.getLore();
+		lore.add(ChatColor.AQUA + "ID: " + data);
+		im.setLore(lore);
+		i.setItemMeta(im);
 		p.getInventory().addItem(i);
 	}
 

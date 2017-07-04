@@ -49,7 +49,7 @@ public class UrlBlock {
 	}
 
 	public ItemStack getHandItem() {
-		return handItem;
+		return getHandItem(1);
 	}
 
 	public ItemStack getGuiItem() {
